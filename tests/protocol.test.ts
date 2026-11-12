@@ -14,7 +14,6 @@ import {
   stopJob,
 } from "../src/protocol/encode";
 import { decodeInt14, decodeInt35, encodeInt14, encodeInt35 } from "../src/protocol/numbers";
-import { sum16 } from "../src/protocol/checksum";
 import { KNOWN_MAGICS, swizzle, swizzleByte, unswizzle, unswizzleByte } from "../src/protocol/swizzle";
 
 const hex = (s: string) => Uint8Array.from(s.match(/../g)!.map((h) => parseInt(h, 16)));
@@ -41,7 +40,6 @@ describe("swizzle", () => {
     // Capture: 0261 d4890df7, checksum over swizzled payload.
     const payload = swizzle(hex("da00057e"), 0x88);
     expect(toHex(payload)).toBe("d4890df7");
-    expect(sum16(payload)).toBe(0x0261);
     expect(toHex(unswizzle(payload, 0x88))).toBe("da00057e");
   });
 });

@@ -1,11 +1,10 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Crosshair, type LucideIcon, Navigation, OctagonX, Pause, Play, RefreshCw, Square } from "lucide-preact";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Crosshair, type LucideIcon, Navigation, OctagonX, Pause, Play, RefreshCw } from "lucide-preact";
 import { lang, msg, t } from "../i18n";
 import { iconify } from "./icons";
 import { type Signal, effect } from "@preact/signals";
 import type { JobRunner } from "../controller/jobRunner";
 import { MAX_SPEED_MM_S, Motion, StoppedError } from "../controller/motion";
 import type { LinkState, RuidaLink } from "../controller/link";
-import { formatStress, runStressTest } from "../controller/stress";
 import type { MemoryReply } from "../protocol/decode";
 import {
   ADDR_MACHINE_STATUS,
@@ -21,7 +20,7 @@ import {
 import { parseHex, toHex } from "./hex";
 
 /**
- * M1 hardware bring-up panel: STOP/Pause/Resume, status + position poller, jog, send stress test.
+ * Machine panel: STOP bar, status + position poller, jog and Go to (raw status in developer mode).
  * Everything that transmits is disabled until the link is verified (Card ID decoded).
  */
 
@@ -65,7 +64,6 @@ export function mountMachinePanel(
   if (!document.getElementById("mp-style")) document.head.append(el("style", { id: "mp-style", textContent: CSS }));
 
   const cleanups: (() => void)[] = [];
-  let stressAbort: AbortController | null = null;
 
   // ---------- STOP / Pause / Resume (fixed, always visible) ----------
   // Share Motion with the workspace so one STOP cancels every queued segment, whoever started the move.
@@ -83,7 +81,6 @@ export function mountMachinePanel(
   cleanups.push(() => stopbar.remove());
 
   const doStop = async () => {
-    stressAbort?.abort();
     const operations: Promise<void>[] = [];
     if (shared.runner?.active) operations.push(shared.runner.stop());
     operations.push(motion.stop());
@@ -175,15 +172,13 @@ export function mountMachinePanel(
   };
   const pollLoop = async () => {
     if (!polling) return;
-    if (!stressAbort) {
-      try {
-        await readOnce();
-      } catch (e) {
-        pollInfo.textContent = t("Poll error: {error}", { error: errText(e) });
-        liveInfo.textContent = pollInfo.textContent;
-        stopPolling();
-        return;
-      }
+    try {
+      await readOnce();
+    } catch (e) {
+      pollInfo.textContent = t("Poll error: {error}", { error: errText(e) });
+      liveInfo.textContent = pollInfo.textContent;
+      stopPolling();
+      return;
     }
     if (polling) pollTimer = setTimeout(pollLoop, Math.max(100, Number(interval.value) || 500));
   };
@@ -329,78 +324,13 @@ export function mountMachinePanel(
     jogControls,
   );
 
-  // ---------- Stress test ----------
-  const payloadSel = el("select");
-  payloadSel.add(new Option(msg("Status query DA 00 04 00 (read-only)"), "status"));
-  payloadSel.add(new Option(msg("Custom hex (repeated)"), "custom"));
-  const customHex = el("input", { placeholder: "unswizzled hex, e.g. DA 00 05 7E", size: 34 });
-  const repeat = num(200, 1, 100000);
-  const chunkSize = num(1024, 1, 65536);
-  const delay = num(0, 0, 10000);
-  const settle = num(1000, 0, 10000, 100);
-  const runBtn = iconify(el("button"), Play, msg("Run stress test"));
-  const abortBtn = iconify(el("button", { disabled: true }), Square, msg("Abort the stress test"));
-  const stressInfo = el("pre", { cls: "result" });
-  runBtn.onclick = async () => {
-    let payload: Uint8Array;
-    try {
-      payload = payloadSel.value === "status" ? queryStatus() : parseHex(customHex.value);
-      if ((payload[0]! & 0x80) === 0) throw new Error(t("Payload must start with a command byte (>= 0x80)"));
-    } catch (e) {
-      stressInfo.textContent = errText(e);
-      return;
-    }
-    stressAbort = new AbortController();
-    runBtn.disabled = true;
-    abortBtn.disabled = false;
-    stressInfo.textContent = t("Running…");
-    try {
-      const r = await runStressTest(link, {
-        payload,
-        repeat: Number(repeat.value),
-        chunkSize: Number(chunkSize.value),
-        delayMs: Number(delay.value),
-        settleMs: Number(settle.value),
-        signal: stressAbort.signal,
-        onProgress: (n, total) => (stressInfo.textContent = t("Running… {n}/{total} chunks", { n, total })),
-      });
-      stressInfo.textContent = formatStress(r).replace(/; /g, "\n");
-    } catch (e) {
-      stressInfo.textContent = t("Not run: {error}", { error: errText(e) });
-    } finally {
-      stressAbort = null;
-      abortBtn.disabled = true;
-      update(link.state);
-    }
-  };
-  abortBtn.onclick = () => stressAbort?.abort();
-  const stressControls = el(
-    "fieldset",
-    { cls: "mp-gate" },
-    row(label(msg("Payload"), payloadSel), customHex),
-    row(label(msg("Repeat"), repeat), label(msg("Chunk bytes"), chunkSize), label(msg("Delay ms"), delay), label(msg("Count replies for ms"), settle)),
-    row(runBtn, abortBtn),
-  );
-  const stressSection = el(
-    "section",
-    {},
-    el("h2", {}, msg("Send stress test")),
-    el(
-      "p",
-      { cls: "small" },
-      msg("Sends the payload Repeat times in chunks (cut at command boundaries) and times every write. A write over 50 ms counts as blocked. With the status query, every query should get one reply: fewer replies than queries means the controller dropped data. Polling pauses during the test. Custom payloads go through the same safety checks as everything else (no memory writes)."),
-    ),
-    stressControls,
-    stressInfo,
-  );
-
   const statusSection = el("section", { cls: "dev-only" }, el("h2", {}, msg("Status and position")), row(readOnceBtn, pollBtn), liveInfo);
   const root = el("div", { id: "machine-panel" }, statusSection, jogSection);
   container.append(root);
   const diagnostics = document.getElementById("diagnostics-machine");
   if (!diagnostics) throw new Error(t("Missing diagnostics container"));
-  diagnostics.append(pollSection, stressSection);
-  cleanups.push(() => { pollSection.remove(); stressSection.remove(); });
+  diagnostics.append(pollSection);
+  cleanups.push(() => { pollSection.remove(); });
   cleanups.push(() => root.remove());
 
   // ---------- Gating ----------
@@ -419,15 +349,12 @@ export function mountMachinePanel(
     if (!ok) {
       stopPolling();
       liveInfo.textContent = t("Status and position not yet read.");
-      stressAbort?.abort();
       atMachine.checked = false;
       lastPosUm = null;
       motion.bed = null;
     }
     atMachine.disabled = !ok;
     jogControls.disabled = !(ok && atMachine.checked);
-    stressControls.disabled = !ok;
-    runBtn.disabled = !ok || !!stressAbort;
   }
   atMachine.onchange = () => {
     shared.atMachine && (shared.atMachine.value = atMachine.checked);

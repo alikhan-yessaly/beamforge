@@ -13,7 +13,7 @@ import { TrafficLog } from "../src/transport/trafficLog";
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(" ");
 
 describe("frameCommands", () => {
-  it("is byte for byte LightBurn's frame of a 72 mm square at 10 mm/s (captures/lightburn-2026-11-11.log)", () => {
+  it("is byte for byte LightBurn's frame of a 72 mm square at 10 mm/s (LightBurn trace, 2026-11-11)", () => {
     const lightburn = [
       "c9 02 00 00 00 00 00", "c6 01 00 00", "c6 02 00 00", "c6 21 00 00", "c6 22 00 00",
       "d9 10 00 00 00 17 5f 08 00 00 15 07 28",

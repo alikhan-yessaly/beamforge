@@ -9,10 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "decode": "tsx scripts/decode-rd.ts",
-    "decode-trace": "tsx scripts/decode-trace.ts",
     "bridge": "tsx scripts/serial-bridge.ts",
-    "ruida": "tsx scripts/ruida.ts",
-    "extract-job": "tsx scripts/extract-job.ts"
+    "ruida": "tsx scripts/ruida.ts"
   },
   "license": "MIT",
   "description": "Browser-based job sender for Ruida laser controllers (Web Serial)",

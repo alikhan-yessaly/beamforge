@@ -1,5 +1,5 @@
 // Machine tab: simple mode (head position, jog, Go to, machine profile) or developer mode (adds connection
-// details, raw status, stress test, raw bytes and the traffic log). The jog/diagnostics DOM comes from
+// details, raw status, raw bytes and the traffic log). The jog/diagnostics DOM comes from
 // src/ui/machinePanel.ts and index.html; elements marked .dev-only are hidden in simple mode.
 import { t } from "../i18n";
 import { Wrench } from "lucide-preact";
@@ -65,7 +65,7 @@ export function MachineTab(props: { visible: boolean; content: HTMLElement | nul
         <span>{advanced ? t("Developer mode") : t("Simple mode")}</span>
         <IconButton
           icon={Wrench}
-          label={advanced ? t("Developer mode: on (connection details, raw status, stress test, raw bytes, traffic log)") : t("Developer mode: off")}
+          label={advanced ? t("Developer mode: on (connection details, raw status, raw bytes, traffic log)") : t("Developer mode: off")}
           pressed={advanced}
           onClick={toggle}
         />

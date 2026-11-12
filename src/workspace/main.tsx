@@ -46,10 +46,12 @@ function App() {
   }, []);
   return (
     <div class="ws">
-      <div class="ws-beta">
-        <strong>BeamForge Beta</strong> · {t("Tested on one RDC644XS controller. Features and other controllers are not fully verified.")}
-        {" "}<a href="https://github.com/alikhan-yessaly/beamforge#safety-and-limitations" target="_blank" rel="noopener noreferrer">{t("Safety and limitations")}</a>
-      </div>
+      {import.meta.env.PROD && (
+        <div class="ws-beta">
+          <strong>BeamForge Beta</strong> · {t("Tested on one RDC644XS controller. Features and other controllers are not fully verified.")}
+          {" "}<a href="https://github.com/alikhan-yessaly/beamforge#safety-and-limitations" target="_blank" rel="noopener noreferrer">{t("Safety and limitations")}</a>
+        </div>
+      )}
       <div class={`ws-top${sketching && connected && !running ? " ws-sketch-stop-space" : ""}`}>
         {sketching ? <SketchToolbar /> : <Toolbar />}
         {!sketching && <LangSwitch />}
