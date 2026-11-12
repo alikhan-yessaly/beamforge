@@ -1,3 +1,4 @@
+import { localizeDom, lang, msg, t } from "./i18n";
 import { type ConnKind, atMachine, jogSpeed, connKind as connKindSignal, connMessage, connectAndVerify, disconnectMachine, link, log, motion, runner, selectConnKind, transport, usb } from "./app/connection";
 import { effect } from "@preact/signals";
 import { MODEL_MAGICS, cardCode, magicForCardId } from "./protocol/cards";
@@ -12,14 +13,14 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 // Icon faces for the static connection and log buttons in index.html.
 for (const [id, icon, label] of [
-  ["connect", Plug, "Connect (reuses the port you picked before)"],
-  ["choose-port", Usb, "Choose port… (always show the browser's port chooser)"],
-  ["disconnect", Unplug, "Disconnect"],
-  ["q-card", BadgeCheck, "Read Card ID (verifies the model)"],
-  ["q-status", Activity, "Read status"],
-  ["send-hex", Send, "Send hex bytes"],
-  ["log-download", Download, "Download the traffic log"],
-  ["log-clear", Eraser, "Clear the traffic log"],
+  ["connect", Plug, msg("Connect (reuses the port you picked before)")],
+  ["choose-port", Usb, msg("Choose port… (always show the browser's port chooser)")],
+  ["disconnect", Unplug, msg("Disconnect")],
+  ["q-card", BadgeCheck, msg("Read Card ID (verifies the model)")],
+  ["q-status", Activity, msg("Read status")],
+  ["send-hex", Send, msg("Send hex bytes")],
+  ["log-download", Download, msg("Download the traffic log")],
+  ["log-clear", Eraser, msg("Clear the traffic log")],
 ] as const) iconify($<HTMLButtonElement>(id), icon, label);
 
 
@@ -62,7 +63,7 @@ effect(() => {
 
 function setConnected(on: boolean, verified = false) {
   connKind.disabled = on;
-  $("state").textContent = on ? (verified ? "Connected, verified" : "Connected") : "Disconnected";
+  $("state").textContent = on ? (verified ? t("Connected, verified") : t("Connected")) : t("Disconnected");
   $<HTMLButtonElement>("connect").disabled = on;
   $<HTMLButtonElement>("choose-port").disabled = on;
   $<HTMLButtonElement>("disconnect").disabled = !on;
@@ -75,11 +76,17 @@ function setConnected(on: boolean, verified = false) {
 link.onStateChange((s) => setConnected(s !== "disconnected", s === "verified"));
 mountMachinePanel($("machine-panel-root"), link, { motion, runner, atMachine, jogSpeed });
 
-const show = (msg: string) => ($("result").textContent = msg);
+// Static text in the machine panel and index.html: translated in place, again whenever the language changes.
+effect(() => {
+  document.documentElement.lang = lang.value;
+  localizeDom($("machine-content"));
+});
+
+const show = (text: string) => ($("result").textContent = text);
 effect(() => {
   if (connMessage.value) show(connMessage.value);
 });
-const fail = (e: unknown) => show(`Error: ${e instanceof Error ? e.message : String(e)}`);
+const fail = (e: unknown) => show(t("Error: {error}", { error: e instanceof Error ? e.message : String(e) }));
 
 model.onchange = () => {
   link.setMagic(currentMagic());
@@ -106,12 +113,12 @@ $("q-card").onclick = async () => {
   try {
     const id = await link.verify();
     if (id === null) {
-      show("No valid Card ID reply. Check the model selection (magic), cable and power.");
+      show(t("No valid Card ID reply. Check the model selection (magic), cable and power."));
       return;
     }
     const hint = magicForCardId(id);
-    const match = hint === link.magic ? "matches" : `DIFFERS from (table suggests 0x${hint.toString(16)})`;
-    show(`Card ID = 0x${id.toString(16)} (card code 0x${cardCode(id).toString(16)}); selected magic 0x${link.magic.toString(16)} ${match} the card table.`);
+    const match = hint === link.magic ? t("matches") : t("DIFFERS from (table suggests {hint})", { hint: `0x${hint.toString(16)}` });
+    show(t("Card ID = {id} (card code {code}); selected magic {magic} {match} the card table.", { id: `0x${id.toString(16)}`, code: `0x${cardCode(id).toString(16)}`, magic: `0x${link.magic.toString(16)}`, match }));
   } catch (e) {
     fail(e);
   }
@@ -120,7 +127,7 @@ $("q-card").onclick = async () => {
 $("q-status").onclick = async () => {
   try {
     const [r] = await link.query(queryStatus());
-    show(r ? `Status = 0x${r.value.toString(16)} (raw ${Array.from(r.data, (b) => b.toString(16).padStart(2, "0")).join(" ")})` : "No reply.");
+    show(r ? `Status = 0x${r.value.toString(16)} (raw ${Array.from(r.data, (b) => b.toString(16).padStart(2, "0")).join(" ")})` : t("No reply."));
   } catch (e) {
     fail(e);
   }
@@ -141,7 +148,7 @@ document.querySelector<HTMLDetailsElement>(".diagnostics")!.addEventListener("to
 $("send-hex").onclick = async () => {
   try {
     const text = $<HTMLInputElement>("hex").value.replace(/[\s,]|0x/gi, "");
-    if (!/^([0-9a-f]{2})+$/i.test(text)) throw new Error("Enter hex bytes, e.g. DA 00 05 7E");
+    if (!/^([0-9a-f]{2})+$/i.test(text)) throw new Error(t("Enter hex bytes, e.g. DA 00 05 7E"));
     await link.send(Uint8Array.from(text.match(/../g)!.map((h) => parseInt(h, 16))), "manual");
   } catch (e) {
     fail(e);

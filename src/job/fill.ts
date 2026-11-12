@@ -1,7 +1,8 @@
 // Fill (engraving) as vector hatch: turn closed outlines into burn polylines that the job encoder sends as ordinary
 // cuts (only commands verified on the machine). All closed paths of a layer are filled together with the even-odd
 // rule, so holes stay empty. Units: bed millimetres, internal orientation.
-import ClipperLib from "clipper-lib";
+import { t } from "../i18n";
+import ClipperLib, { type PolyNodeType } from "clipper-lib";
 import type { Vec } from "../geom/geom";
 
 export type FillPattern = "lines" | "cross" | "dots" | "offset";
@@ -54,8 +55,8 @@ export function fillPaths(polys: Vec[][], s: FillSettings): FillResult {
 }
 
 class TooDense extends Error {}
-const tooDense = () =>
-  new TooDense(`Fill is too dense (over ${MAX_FILL_PATHS.toLocaleString()} burn lines). Increase the interval or fill a smaller area.`);
+export const tooDenseMessage = () => t("Fill is too dense (over {n} burn lines). Increase the interval or fill a smaller area.", { n: MAX_FILL_PATHS.toLocaleString() });
+const tooDense = () => new TooDense(tooDenseMessage());
 
 const rot = (p: Vec, c: number, s: number): Vec => ({ x: p.x * c - p.y * s, y: p.x * s + p.y * c });
 
@@ -134,5 +135,36 @@ function contours(rings: Vec[][], interval: number): Vec[][] {
     cur = next;
     step = -interval;
   }
+  return out;
+}
+
+/**
+ * Separate filled areas ("islands": an outline plus its holes) from groups of rings. Each group is read even-odd
+ * (a shape and the shapes inside it); groups are then united, so overlapping regions don't cancel each other.
+ */
+export function fillIslands(groups: Vec[][][]): Vec[][][] {
+  const toC = (r: Vec[]) => r.map((p) => ({ X: Math.round(p.x * UM), Y: Math.round(p.y * UM) }));
+  const all = new ClipperLib.Clipper();
+  for (const g of groups) {
+    const rings = g.filter((r) => r.length >= 3);
+    if (!rings.length) continue;
+    const c = new ClipperLib.Clipper();
+    c.AddPaths(rings.map(toC), ClipperLib.PolyType.ptSubject, true);
+    const solved = new ClipperLib.Paths();
+    c.Execute(ClipperLib.ClipType.ctUnion, solved, ClipperLib.PolyFillType.pftEvenOdd, ClipperLib.PolyFillType.pftEvenOdd);
+    if (solved.length) all.AddPaths(solved, ClipperLib.PolyType.ptSubject, true);
+  }
+  const tree = new ClipperLib.PolyTree();
+  all.Execute(ClipperLib.ClipType.ctUnion, tree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+  const fromC = (path: { X: number; Y: number }[]) => path.map((p) => ({ x: p.X / UM, y: p.Y / UM }));
+  const out: Vec[][][] = [];
+  // Children of the root and of holes are outlines; children of outlines are their holes.
+  const visit = (node: PolyNodeType) => {
+    for (const outer of node.Childs()) {
+      out.push([fromC(outer.Contour()), ...outer.Childs().map((h) => fromC(h.Contour()))]);
+      for (const hole of outer.Childs()) visit(hole);
+    }
+  };
+  visit(tree);
   return out;
 }

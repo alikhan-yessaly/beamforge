@@ -1,9 +1,11 @@
-import { type Box, type Vec, apply, mul } from "../geom/geom";
+import { type Box, type Mat, type Vec, apply, mul } from "../geom/geom";
 import type { Estimate } from "../job/estimate";
 import type { Toolpath } from "../job/plan";
 import { type Doc, type Layer, type MachineProfile, toUser } from "../scene/model";
 import { objectBox } from "../scene/ops";
 import { activeLayers } from "../job/layers";
+import { regionRings } from "../job/regions";
+import { t } from "../i18n";
 import { type View, toScreen } from "./view";
 
 export interface Overlay {
@@ -21,6 +23,20 @@ export interface Overlay {
   jobOrigin?: Vec | null;
   /** Head projected onto the design during a current-position job. */
   projectedHead?: Vec | null;
+  /** Fill tool: the region under the cursor (bed mm rings, even-odd) and the colour it would get. */
+  fillHover?: { rings: Vec[][]; color: string } | null;
+}
+
+function traceRing(ctx: CanvasRenderingContext2D, m: Mat, ring: Vec[]): void {
+  if (!ring.length) return;
+  const at = (p: Vec) => apply(m, p);
+  const s0 = at(ring[0]!);
+  ctx.moveTo(s0.x, s0.y);
+  for (let i = 1; i < ring.length; i++) {
+    const s = at(ring[i]!);
+    ctx.lineTo(s.x, s.y);
+  }
+  ctx.closePath();
 }
 
 export const HANDLE = 8;
@@ -146,6 +162,19 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: n
       if (list) list.push(path);
       else byColor.set(path.color, [path]);
     }
+    // Filled regions (Fill tool): tinted in their fill colour under the outlines, holes clear.
+    const byFill = new Map<string, number[]>();
+    obj.paths.forEach((path, i) => {
+      if (path.fill) byFill.set(path.fill, [...(byFill.get(path.fill) ?? []), i]);
+    });
+    for (const [color, idx] of byFill) {
+      const layer = layerSettings.get(color);
+      ctx.beginPath();
+      for (const i of idx) for (const ring of regionRings(obj.paths, i)) traceRing(ctx, m, ring);
+      ctx.fillStyle = color === "#ffffff" ? "#000000" : color;
+      ctx.globalAlpha = 0.35 * layerStrokeStyle(layer).alpha * (layer?.show === false ? 0.4 : 1) * (ov.preview ? 0.25 : 1) * (ov.dimObjects ? 0.3 : 1);
+      ctx.fill("evenodd");
+    }
     for (const [color, paths] of byColor) {
       ctx.beginPath();
       for (const path of paths) {
@@ -187,6 +216,21 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: n
   }
 
   ctx.globalAlpha = 1;
+  if (ov.fillHover) {
+    const { rings, color } = ov.fillHover;
+    const vm: Mat = [v.zoom, 0, 0, v.zoom, v.ox, v.oy];
+    ctx.beginPath();
+    for (const ring of rings) traceRing(ctx, vm, ring);
+    ctx.fillStyle = color === "#ffffff" ? "#000000" : color;
+    ctx.globalAlpha = 0.45;
+    ctx.fill("evenodd");
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = color === "#ffffff" ? "#000000" : color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   if (ov.preview) drawToolpath(ctx, v, ov.preview.tp, ov.preview.est, ov.preview.t, colors.out);
   if (ov.jobOrigin) {
     const origin = toScreen(v, ov.jobOrigin);
@@ -211,7 +255,7 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: n
     if (toLeft && origin.x < 130) toLeft = false;
     ctx.textAlign = toLeft ? "right" : "left";
     ctx.textBaseline = toTop ? "bottom" : "top";
-    ctx.fillText("Job reference", origin.x + (toLeft ? -12 : 12), origin.y + (toTop ? -6 : 6));
+    ctx.fillText(t("Job reference"), origin.x + (toLeft ? -12 : 12), origin.y + (toTop ? -6 : 6));
   }
   if (ov.head) {
     const h = toScreen(v, ov.head);
@@ -235,7 +279,7 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: n
     ctx.fillStyle = "#6d28d9";
     ctx.textAlign = h.x > w - 130 ? "right" : "left";
     ctx.textBaseline = "top";
-    ctx.fillText("On drawing", h.x + (h.x > w - 130 ? -12 : 12), h.y + 6);
+    ctx.fillText(t("On drawing"), h.x + (h.x > w - 130 ? -12 : 12), h.y + 6);
   }
   if (ov.preview) return;
 

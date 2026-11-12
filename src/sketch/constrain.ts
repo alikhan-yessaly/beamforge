@@ -1,4 +1,5 @@
 // Turning a selection into constraints and dimensions, the way Onshape's toolbar and dimension tool do (pure).
+import { t } from "../i18n";
 import type { Vec } from "../geom/geom";
 import { type Constraint, type ConstraintType, type Entity, type Sketch, addConstraint, entity, pt } from "./model";
 import { measure, solve } from "./solver";
@@ -30,7 +31,7 @@ export function applyConstraint(s: Sketch, tool: ConstraintTool, sel: string[]):
       if (pts.length === 2 && sel.length === 2) return { s: add("coincident", pts) };
       if (pts.length === 1 && lines.length === 1) return { s: add("pointOnLine", [pts[0]!, lines[0]!]) };
       if (pts.length === 1 && curves.length === 1) return { s: add("pointOnCircle", [pts[0]!, curves[0]!]) };
-      return { error: "Coincident: select two points, or a point and a line, circle or arc." };
+      return { error: t("Coincident: select two points, or a point and a line, circle or arc.") };
     case "horizontal":
     case "vertical": {
       if (lines.length && lines.length === sel.length) {
@@ -39,27 +40,27 @@ export function applyConstraint(s: Sketch, tool: ConstraintTool, sel: string[]):
         return { s: out };
       }
       if (pts.length === 2 && sel.length === 2) return { s: add(tool === "horizontal" ? "horizontalPts" : "verticalPts", pts) };
-      return { error: `${tool === "horizontal" ? "Horizontal" : "Vertical"}: select lines, or two points.` };
+      return { error: tool === "horizontal" ? t("Horizontal: select lines, or two points.") : t("Vertical: select lines, or two points.") };
     }
     case "parallel":
     case "perpendicular":
       if (lines.length === 2 && sel.length === 2) return { s: add(tool, lines) };
-      return { error: `${tool === "parallel" ? "Parallel" : "Perpendicular"}: select two lines.` };
+      return { error: tool === "parallel" ? t("Parallel: select two lines.") : t("Perpendicular: select two lines.") };
     case "tangent":
       if (sel.length === 2 && (lines.length + curves.length === 2) && curves.length >= 1) return { s: add("tangent", sel) };
-      return { error: "Tangent: select a line and a circle/arc, or two circles/arcs." };
+      return { error: t("Tangent: select a line and a circle/arc, or two circles/arcs.") };
     case "equal":
       if (sel.length === 2 && (lines.length === 2 || curves.length === 2)) return { s: add("equal", sel) };
-      return { error: "Equal: select two lines, or two circles/arcs." };
+      return { error: t("Equal: select two lines, or two circles/arcs.") };
     case "midpoint":
       if (pts.length === 1 && lines.length === 1 && sel.length === 2) return { s: add("midpoint", [pts[0]!, lines[0]!]) };
-      return { error: "Midpoint: select a point and a line." };
+      return { error: t("Midpoint: select a point and a line.") };
     case "concentric":
       if (curves.length === 2 && sel.length === 2) return { s: add("concentric", curves) };
-      return { error: "Concentric: select two circles or arcs." };
+      return { error: t("Concentric: select two circles or arcs.") };
     case "symmetric":
       if (pts.length === 2 && lines.length === 1 && sel.length === 3) return { s: add("symmetric", [pts[0]!, pts[1]!, lines[0]!]) };
-      return { error: "Symmetric: select two points and the line to mirror about." };
+      return { error: t("Symmetric: select two points and the line to mirror about.") };
     case "fix": {
       // Pin points (and the points of selected entities); toggles off if all are pinned already.
       const ids = new Set(pts);
@@ -67,7 +68,7 @@ export function applyConstraint(s: Sketch, tool: ConstraintTool, sel: string[]):
         const e = entity(s, id);
         if (e) for (const p of e.kind === "line" ? [e.p1, e.p2] : e.kind === "circle" || e.kind === "arc" ? [e.c] : []) ids.add(p);
       }
-      if (!ids.size) return { error: "Fix: select points or geometry." };
+      if (!ids.size) return { error: t("Fix: select points or geometry.") };
       const unfix = [...ids].every((id) => s.points[id]!.fixed);
       const points = { ...s.points };
       for (const id of ids) if (id !== "o") points[id] = { ...points[id]!, fixed: !unfix };

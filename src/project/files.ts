@@ -1,6 +1,7 @@
 // Reading and writing project files. Uses the File System Access API where the browser has it (Chrome, Edge):
 // Save writes back to the same file and recent files can be reopened. Elsewhere (Safari, Firefox, embedded
 // previews) Open uses a file input and Save downloads a copy.
+import { t } from "../i18n";
 import { PROJECT_EXT } from "./format";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -46,7 +47,7 @@ export async function pickProjectFile(): Promise<OpenedFile | null> {
 export async function readHandle(handle: Handle): Promise<OpenedFile> {
   const h = handle as any;
   if ((await h.queryPermission?.({ mode: "readwrite" })) !== "granted" && (await h.requestPermission?.({ mode: "readwrite" })) !== "granted") {
-    throw new Error("Permission to open the file was refused");
+    throw new Error(t("Permission to open the file was refused"));
   }
   const file = await handle.getFile();
   return { name: file.name, text: await file.text(), handle };
@@ -56,7 +57,7 @@ export async function readHandle(handle: Handle): Promise<OpenedFile> {
 export async function writeHandle(handle: Handle, text: string): Promise<void> {
   const h = handle as any;
   if ((await h.queryPermission?.({ mode: "readwrite" })) !== "granted" && (await h.requestPermission?.({ mode: "readwrite" })) !== "granted") {
-    throw new Error("Permission to save the file was refused");
+    throw new Error(t("Permission to save the file was refused"));
   }
   const w = await handle.createWritable();
   await w.write(text);

@@ -1,4 +1,5 @@
 // Toolbar: New, Open (with recent files), Save (to the project's file), Save As… (to a new file), project name.
+import { t } from "../i18n";
 import { ChevronDown, FileOutput, FilePlus, FolderOpen, Save } from "lucide-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { dirty, newProject, openProject, openRecent, project, recentFiles, saveProject, saveProjectAs } from "../project/state";
@@ -23,14 +24,14 @@ export function ProjectButtons() {
   const fileName = `${project.value.name}.laserproj`;
   return (
     <>
-      <IconButton icon={FilePlus} label="New project" onClick={newProject} />
+      <IconButton icon={FilePlus} label={t("New project")} onClick={newProject} />
       <div class="ws-split" ref={ref}>
-        <IconButton icon={FolderOpen} label="Open a project… (⌘O)" onClick={() => void openProject()} />
+        <IconButton icon={FolderOpen} label={t("Open a project… (⌘O)")} onClick={() => void openProject()} />
         {recent.length > 0 && (
-          <IconButton icon={ChevronDown} class="ws-split-more" label="Recent projects" pressed={open} onClick={() => setOpen(!open)} />
+          <IconButton icon={ChevronDown} class="ws-split-more" label={t("Recent projects")} pressed={open} onClick={() => setOpen(!open)} />
         )}
         {open && (
-          <div class="ws-popover ws-menu" role="menu" aria-label="Recent projects">
+          <div class="ws-popover ws-menu" role="menu" aria-label={t("Recent projects")}>
             {recent.map((r) => (
               <button
                 key={`${r.name}-${r.openedAt}`}
@@ -53,22 +54,22 @@ export function ProjectButtons() {
         class={hasFile && dirty.value ? "ws-dirty" : ""}
         label={
           !hasFile
-            ? "Save — not available until the project has a file: use Save As… first"
+            ? t("Save — not available until the project has a file: use Save As… first")
             : dirty.value
-              ? `Save changes to ${fileName} (⌘S)`
-              : `Save — no changes since ${fileName} was saved`
+              ? t("Save changes to {file} (⌘S)", { file: fileName })
+              : t("Save — no changes since {file} was saved", { file: fileName })
         }
         disabled={!hasFile || !dirty.value}
         onClick={() => void saveProject()}
       />
-      <IconButton icon={FileOutput} label={`Save As… — save the project to a new .laserproj file (⇧⌘S)`} onClick={() => void saveProjectAs()} />
+      <IconButton icon={FileOutput} label={t("Save As… — save the project to a new .laserproj file (⇧⌘S)")} onClick={() => void saveProjectAs()} />
       <span
         class={`ws-project-name${dirty.value ? " dirty" : ""}`}
-        title={`${hasFile ? `Project file: ${fileName}` : "Not saved to a file yet (use Save As…)"}${dirty.value ? " · unsaved changes" : ""}. Your work is also autosaved in this browser, so a reload keeps it.`}
+        title={`${hasFile ? t("Project file: {file}", { file: fileName }) : t("Not saved to a file yet (use Save As…)")}${dirty.value ? ` · ${t("unsaved changes")}` : ""}. ${t("Your work is also autosaved in this browser, so a reload keeps it.")}`}
       >
-        {project.value.name}
-        {hasFile ? <small>.laserproj</small> : <small> · not saved to a file</small>}
-        {dirty.value && hasFile && <i aria-label="unsaved changes" />}
+        {project.value.name === "Untitled" ? t("Untitled") : project.value.name}
+        {hasFile ? <small>{t(".laserproj")}</small> : <small>{" "}{t("· not saved to a file")}</small>}
+        {dirty.value && hasFile && <i aria-label={t("unsaved changes")} />}
       </span>
     </>
   );

@@ -1,4 +1,5 @@
 // Shape tools and patterns (pure): slot, regular polygon, linear/grid and circular patterns.
+import { t } from "../i18n";
 import type { Vec } from "../geom/geom";
 import { type Constraint, type Entity, type NewEntity, type Sketch, addConstraint, addEntity, addPoint, entity, entityPoints, pt } from "./model";
 import { type Click, pointFor } from "./draw";
@@ -160,11 +161,11 @@ function anchorOf(s: Sketch, ids: string[]): string | null {
 /** Linear (one direction) or grid (two) pattern: copies at i·step1 + j·step2, held there relative to the original. */
 export function linearPattern(s: Sketch, ids: string[], step1: Vec, count1: number, step2: Vec, count2: number): { s: Sketch } | { error: string } {
   const anchor = anchorOf(s, ids);
-  if (!anchor) return { error: "Select the geometry to pattern first." };
+  if (!anchor) return { error: t("Select the geometry to pattern first.") };
   let out = s;
   const n1 = Math.max(1, Math.round(count1));
   const n2 = Math.max(1, Math.round(count2));
-  if (n1 * n2 < 2) return { error: "Set more than one copy." };
+  if (n1 * n2 < 2) return { error: t("Set more than one copy.") };
   for (let i = 0; i < n1; i++) {
     for (let j = 0; j < n2; j++) {
       if (!i && !j) continue;
@@ -182,7 +183,7 @@ export function linearPattern(s: Sketch, ids: string[], step1: Vec, count1: numb
 /** Circular pattern: `count` items in all (the original included) spread evenly around the centre point. */
 export function circularPattern(s: Sketch, ids: string[], centre: string, count: number, sweepDeg = 360): { s: Sketch } | { error: string } {
   const n = Math.max(2, Math.round(count));
-  if (!anchorOf(s, ids)) return { error: "Select the geometry to pattern first." };
+  if (!anchorOf(s, ids)) return { error: t("Select the geometry to pattern first.") };
   const C = pt(s, centre);
   const full = Math.abs(sweepDeg - 360) < 1e-9;
   const step = ((sweepDeg * Math.PI) / 180) / (full ? n : n - 1);

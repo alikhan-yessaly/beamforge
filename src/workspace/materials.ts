@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { signal } from "@preact/signals";
 import type { Layer } from "../scene/model";
 
@@ -29,13 +30,13 @@ export function parsePresets(raw: string | null): MaterialPreset[] {
     typeof (p as MaterialPreset).id === "string" &&
     typeof (p as MaterialPreset).name === "string" &&
     typeof (p as MaterialPreset).machine === "string" && validPreset(p as MaterialPreset),
-  )) throw new Error("Saved material presets are invalid");
+  )) throw new Error(t("Saved material presets are invalid"));
   return parsed as MaterialPreset[];
 }
 
 /** The layer settings a preset sets; corner power is linked when the preset's two powers are equal. */
 export function presetSettings(p: MaterialPreset): Pick<Layer, "speed" | "minPower" | "maxPower" | "passes" | "linkPower"> {
-  if (!validPreset(p)) throw new Error("Material preset settings are invalid");
+  if (!validPreset(p)) throw new Error(t("Material preset settings are invalid"));
   return { speed: p.speed, minPower: p.minPower, maxPower: p.maxPower, passes: p.passes, linkPower: p.minPower === p.maxPower };
 }
 
@@ -49,7 +50,7 @@ function load(): { items: MaterialPreset[]; error: string | null } {
   try {
     return { items: parsePresets(localStorage.getItem(MATERIALS_KEY)), error: null };
   } catch (e) {
-    return { items: [], error: `Could not load material presets: ${e instanceof Error ? e.message : String(e)}. They will not be overwritten.` };
+    return { items: [], error: t("Could not load material presets: {error}. They will not be overwritten.", { error: e instanceof Error ? e.message : String(e) }) };
   }
 }
 const initial = load();

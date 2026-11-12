@@ -4,6 +4,7 @@
 // cut at command boundaries, no pacing; D8 02 / D8 03 / D8 01 pause, resume and stop a running job at once (Stop
 // also sends the head back to the job start). LightBurn does not poll during a job; we poll status 0x200 for
 // progress, which the controller answered fine during LightBurn's jobs.
+import { t } from "../i18n";
 import { chunkCommands } from "../protocol/chunk";
 import {
   ADDR_BED_X,
@@ -107,8 +108,8 @@ export class JobRunner {
    * Resolves with the final phase ("done" or "stopped"); rejects on errors (phase "failed").
    */
   async run(commands: Uint8Array[], onProgress: (p: JobProgress) => void = () => {}): Promise<"done" | "stopped"> {
-    if (this.active) throw new Error("A job is already running");
-    if (!this.link.verified) throw new Error("Not connected and verified");
+    if (this.active) throw new Error(t("A job is already running"));
+    if (!this.link.verified) throw new Error(t("Not connected and verified"));
     this.stopRequested = false;
     const t0 = performance.now();
     const elapsed = () => (performance.now() - t0) / 1000;
@@ -120,7 +121,7 @@ export class JobRunner {
       report("checking", null);
       const bounds = inspectJob(commands);
       const s0 = await this.snapshot();
-      if (s0.status & (STATUS_JOB_ACTIVE | STATUS_MOVING)) throw new Error(`Machine is busy (status 0x${s0.status.toString(16)})`);
+      if (s0.status & (STATUS_JOB_ACTIVE | STATUS_MOVING)) throw new Error(t("Machine is busy (status {status})", { status: `0x${s0.status.toString(16)}` }));
       const bed = { x: await this.read(ADDR_BED_X), y: await this.read(ADDR_BED_Y) };
       const at = placeJob(bounds, s0.pos);
       if (at.min.x < 0 || at.min.y < 0 || at.max.x > bed.x || at.max.y > bed.y) {
@@ -165,7 +166,7 @@ export class JobRunner {
           continue;
         }
         if (!started) {
-          if (performance.now() > startBy) throw new Error(`The job did not start (status 0x${s.status.toString(16)})`);
+          if (performance.now() > startBy) throw new Error(t("The job did not start (status {status})", { status: `0x${s.status.toString(16)}` }));
           report("starting", s);
           continue;
         }

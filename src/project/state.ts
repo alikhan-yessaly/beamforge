@@ -1,5 +1,6 @@
 // The open project: its name, file handle and what was last saved, so the app knows about unsaved changes.
 // Autosave (localStorage, src/scene/store.ts) still keeps the working document across reloads.
+import { t } from "../i18n";
 import { computed, effect, signal } from "@preact/signals";
 import { link } from "../app/connection";
 import { outsideBed } from "../scene/ops";
@@ -75,11 +76,11 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** Ask before throwing away unsaved work. */
 function okToDiscard(action: string): boolean {
-  return !dirty.value || window.confirm(`"${project.value.name}" has unsaved changes. ${action} anyway and lose them?`);
+  return !dirty.value || window.confirm(t("\"{name}\" has unsaved changes. {action} anyway and lose them?", { name: project.value.name, action }));
 }
 
 export function newProject(): void {
-  if (!okToDiscard("Start a new project")) return;
+  if (!okToDiscard(t("Start a new project"))) return;
   resetDoc({ objects: [], layers: [] });
   project.value = { name: "Untitled", handle: null, saved: null };
 }
@@ -91,27 +92,27 @@ function load(f: OpenedFile): void {
   project.value = { name: projectName(f.name), handle: f.handle, saved: { doc: doc.value, job: jobNow() } };
   if (f.handle) void rememberRecent(f.name, f.handle).then((r) => (recentFiles.value = r));
   const notes: string[] = [];
-  if (p.machine.profileName && p.machine.profileName !== profile.value.name) notes.push(`it was set up for "${p.machine.profileName}"`);
+  if (p.machine.profileName && p.machine.profileName !== profile.value.name) notes.push(t("it was set up for \"{machine}\"", { machine: p.machine.profileName }));
   if (outsideBed(p.doc, profile.value)) notes.push("part of the drawing is outside this machine's bed");
   notify(`Opened ${projectName(f.name)}${notes.length ? `: ${notes.join("; ")}` : ""}.`, notes.length ? "warn" : "info");
 }
 
 export async function openProject(): Promise<void> {
-  if (!okToDiscard("Open another project")) return;
+  if (!okToDiscard(t("Open another project"))) return;
   try {
     const f = await pickProjectFile();
     if (f) load(f);
   } catch (e) {
-    notify(`Could not open the project: ${errText(e)}`, "error");
+    notify(t("Could not open the project: {error}", { error: errText(e) }), "error");
   }
 }
 
 export async function openRecent(r: RecentFile): Promise<void> {
-  if (!okToDiscard("Open another project")) return;
+  if (!okToDiscard(t("Open another project"))) return;
   try {
     load(await readHandle(r.handle));
   } catch (e) {
-    notify(`Could not open ${r.name}: ${errText(e)}`, "error");
+    notify(t("Could not open {file}: {error}", { file: r.name, error: errText(e) }), "error");
   }
 }
 
@@ -130,7 +131,7 @@ export async function saveProject(): Promise<void> {
     project.value = { ...project.value, saved };
     notify(`Saved ${project.value.name}.`);
   } catch (e) {
-    notify(`Could not save: ${errText(e)}`, "error");
+    notify(t("Could not save: {error}", { error: errText(e) }), "error");
   }
 }
 
@@ -141,8 +142,8 @@ export async function saveProjectAs(): Promise<void> {
     if (!r) return;
     project.value = { name: projectName(r.name), handle: r.handle, saved };
     if (r.handle) void rememberRecent(r.name, r.handle).then((list) => (recentFiles.value = list));
-    notify(canSaveInPlace ? `Saved as ${r.name}.` : `Downloaded ${r.name}. This browser can't write to files, so each Save As downloads a new copy.`);
+    notify(canSaveInPlace ? t("Saved as {file}.", { file: r.name }) : t("Downloaded {file}. This browser can't write to files, so each Save As downloads a new copy.", { file: r.name }));
   } catch (e) {
-    notify(`Could not save: ${errText(e)}`, "error");
+    notify(t("Could not save: {error}", { error: errText(e) }), "error");
   }
 }

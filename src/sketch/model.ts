@@ -115,6 +115,8 @@ export interface Sketch {
   color: string;
   /** Counter for new ids. */
   next: number;
+  /** Filled regions: the closed loop (sorted entity ids) and the fill colour. */
+  fills?: { loop: string[]; color: string }[];
 }
 
 export const ORIGIN = "o";

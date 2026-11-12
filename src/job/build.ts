@@ -1,5 +1,6 @@
 // Document → job: plan the toolpath, convert bed millimetres to machine micrometres, group into layers of paths
 // for the .rd encoder.
+import { t } from "../i18n";
 import { type RdJobInput, type RdLayer, type PointUm, encodeJob } from "../protocol/jobEncode";
 import { type Doc, type MachineProfile, toUser } from "../scene/model";
 import { type Toolpath, planToolpath } from "./plan";
@@ -50,7 +51,7 @@ export function buildJob(doc: Doc, profile: MachineProfile, opts: BuildOptions):
   const home = { x: profile.origin.endsWith("right") ? profile.bedW : 0, y: profile.origin.startsWith("bottom") ? profile.bedH : 0 };
   const tp = planToolpath(doc, { start: home, innerFirst: opts.innerFirst });
   if (tp.errors.length) throw new Error(tp.errors.join(" "));
-  if (!tp.segments.some((s) => s.cut)) throw new Error("Nothing to cut: no layer with output on has any paths");
+  if (!tp.segments.some((s) => s.cut)) throw new Error(t("Nothing to cut: no layer with output on has any paths"));
 
   // Segments → per-layer paths. A cut that doesn't continue from the previous cut starts a new path.
   const layers: RdLayer[] = tp.layers.map((l) => ({ speed: l.speed, minPower: l.minPower, maxPower: l.maxPower, color: l.color, paths: [] }));
@@ -75,14 +76,14 @@ export function buildJob(doc: Doc, profile: MachineProfile, opts: BuildOptions):
   const bedX = Math.round(profile.bedW * 1000);
   const bedY = Math.round(profile.bedH * 1000);
   const outside = all.some((p) => p.x < 0 || p.y < 0 || p.x > bedX || p.y > bedY);
-  if (opts.mode === "absolute" && outside) throw new Error("Part of the design is outside the bed; move it onto the bed first");
+  if (opts.mode === "absolute" && outside) throw new Error(t("Part of the design is outside the bed; move it onto the bed first"));
 
   const origin = designOrigin(doc, profile);
   if (opts.mode === "current") {
-    if (!origin) throw new Error("Show at least one layer with drawable paths to set the relative origin");
+    if (!origin) throw new Error(t("Show at least one layer with drawable paths to set the relative origin"));
     for (const l of layers) l.paths = l.paths.map((p) => p.map((v) => ({ x: v.x - origin.x, y: v.y - origin.y })));
     if (layers.some((l) => l.paths.some((p) => p.some((v) => v.x < 0 || v.y < 0)))) {
-      throw new Error("A hidden output layer lies beyond the relative origin. Show it or turn off its output before framing, starting, or saving.");
+      throw new Error(t("A hidden output layer lies beyond the relative origin. Show it or turn off its output before framing, starting, or saving."));
     }
   }
   return { input: { mode: opts.mode, layers: layers.filter((l) => l.paths.length > 0) }, toolpath: tp, designOrigin: origin ?? { x: 0, y: 0 } };

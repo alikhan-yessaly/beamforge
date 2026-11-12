@@ -1,6 +1,7 @@
 // Machine tab: simple mode (head position, jog, Go to, machine profile) or developer mode (adds connection
 // details, raw status, stress test, raw bytes and the traffic log). The jog/diagnostics DOM comes from
 // src/ui/machinePanel.ts and index.html; elements marked .dev-only are hidden in simple mode.
+import { t } from "../i18n";
 import { Wrench } from "lucide-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { headPos, linkState, watchHeadPosition } from "../app/connection";
@@ -25,7 +26,7 @@ function HeadPosition(props: { active: boolean }) {
   const verified = linkState.value === "verified";
   return (
     <section class="ws-panel">
-      <h3>Head position</h3>
+      <h3>{t("Head position")}</h3>
       {verified && p ? (
         <div class="ws-headpos">
           <span>
@@ -34,10 +35,10 @@ function HeadPosition(props: { active: boolean }) {
           <span>
             <em>Y</em> {mm(p.y)}
           </span>
-          <small>mm from home</small>
+          <small>{t("mm from home")}</small>
         </div>
       ) : (
-        <p class="ws-hint">{verified ? "Reading…" : "Connect to the machine (plug icon, top right) to see the head position."}</p>
+        <p class="ws-hint">{verified ? t("Reading…") : t("Connect to the machine (plug icon, top right) to see the head position.")}</p>
       )}
     </section>
   );
@@ -61,10 +62,10 @@ export function MachineTab(props: { visible: boolean; content: HTMLElement | nul
   return (
     <div class={`ws-machine ${advanced ? "advanced" : "simple"}`} hidden={!props.visible}>
       <div class="ws-machine-head">
-        <span>{advanced ? "Developer mode" : "Simple mode"}</span>
+        <span>{advanced ? t("Developer mode") : t("Simple mode")}</span>
         <IconButton
           icon={Wrench}
-          label={advanced ? "Developer mode: on (connection details, raw status, stress test, raw bytes, traffic log)" : "Developer mode: off"}
+          label={advanced ? t("Developer mode: on (connection details, raw status, stress test, raw bytes, traffic log)") : t("Developer mode: off")}
           pressed={advanced}
           onClick={toggle}
         />

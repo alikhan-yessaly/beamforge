@@ -319,12 +319,9 @@ body > #workspace { height: 100%; border: 0; }
 .ws-start-dialog h3 { margin: 0 0 .4rem; font-size: 1rem; }
 .ws-start-dialog p { margin: .3rem 0; font-size: .88rem; }
 .ws-start-dialog .ws-plan-msg { display: flex; gap: .35rem; align-items: flex-start; }
-.ws-checklist { display: grid; gap: .45rem; margin: .7rem 0; font-size: .88rem; }
-.ws-checklist label { display: flex; gap: .5rem; align-items: center; cursor: pointer; }
-.ws-checklist input { width: 1.05rem; height: 1.05rem; }
+.ws-checklist { display: grid; gap: .45rem; margin: .7rem 0; padding-left: 1.3rem; font-size: .88rem; }
 .ws-dialog-actions { justify-content: flex-end; margin-top: .6rem; }
 .ws .ws-start-confirm { display: inline-flex; align-items: center; gap: .35rem; background: #2563eb; color: #fff; border-color: #2563eb; font-weight: 600; }
-.ws .ws-start-confirm:disabled { opacity: .45; cursor: default; }
 
 /* Shortcut sheet */
 .ws-shortcuts { max-width: 760px; width: calc(100vw - 4rem); border: 1px solid #d5dbe3; border-radius: 10px; padding: 1rem 1.2rem; box-shadow: 0 12px 32px rgba(15, 23, 42, .25); }
@@ -359,3 +356,7 @@ body > #workspace { height: 100%; border: 0; }
 .ws-text-editor label { display: inline-flex; align-items: center; gap: .2rem; white-space: nowrap; }
 .ws-text-editor label input { width: 3.2rem; }
 .ws-text-editor select { max-width: 9rem; }
+.ws-scale { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-top: .25rem; font-size: .78rem; }
+.ws-scale .ws-num input { width: 4.2rem; }
+.ws-sketch-scaled { font-size: .75rem; padding: .1rem .45rem; border-radius: 999px; background: #fef3c7; color: #92400e; white-space: nowrap; }
+.ws-lang { font-size: .75rem; padding: .15rem .25rem; border-radius: 4px; margin-right: .35rem; align-self: center; }

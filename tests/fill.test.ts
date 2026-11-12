@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { IDENTITY, type Vec } from "../src/geom/geom";
 import { buildJob } from "../src/job/build";
 import { MAX_FILL_PATHS, fillPaths } from "../src/job/fill";
-import { activeLayers, assignColor, assignMode, updateLayer } from "../src/job/layers";
-import { planToolpath } from "../src/job/plan";
+import { activeLayers, assignColor, assignMode, migrateDoc, toggleRegionFill, updateLayer } from "../src/job/layers";
+import { fillUnits, planToolpath } from "../src/job/plan";
 import type { Doc, MachineProfile, ScenePath } from "../src/scene/model";
+import { addEntity, addPoint, emptySketch } from "../src/sketch/model";
+import { sketchPaths } from "../src/sketch/paths";
 
 const sq = (x: number, y: number, s: number): Vec[] => [{ x, y }, { x: x + s, y }, { x: x + s, y: y + s }, { x, y: y + s }];
 const box = (paths: Vec[][]) => {
@@ -79,6 +81,95 @@ describe("fill layers in the planner", () => {
     expect(planToolpath(d, { start: { x: 0, y: 0 }, innerFirst: true }).warnings[0]).toMatch(/open paths/);
     const dense = updateLayer(docOf([path(sq(0, 0, 300), "#ff0000")]), "#ff0000", { mode: "fill", fill: { pattern: "dots", interval: 0.05, angle: 0 } });
     expect(() => buildJob(dense, P, { mode: "absolute", innerFirst: true })).toThrow(/too dense/);
+  });
+});
+
+describe("fill regions and clusters", () => {
+  const F = "#00e000";
+  const start = { x: 0, y: 0 };
+
+  it("engraves a tagged region on the fill colour, leaving the holes inside it empty, and still cuts the outlines", () => {
+    // A 20 mm square (cut, red) filled green, with a 10 mm hole (cut, red) inside.
+    const outer = { ...path(sq(0, 0, 20), "#ff0000"), fill: F };
+    const d = updateLayer(docOf([outer, path(sq(5, 5, 10), "#ff0000")]), F, { mode: "fill", fill: { pattern: "lines", interval: 1, angle: 0 } });
+    expect(activeLayers(d).map((l) => l.color).sort()).toEqual([F, "#ff0000"].sort());
+    const tp = planToolpath(d, { start, innerFirst: true });
+    const fillLayer = tp.layers.findIndex((l) => l.color === F);
+    const hatch = tp.segments.filter((s) => s.cut && s.layer === fillLayer);
+    // 20 rows; the 10 rows beside the hole are split in two.
+    expect(hatch).toHaveLength(30);
+    expect(hatch.some((s) => s.y0 > 5 && s.y0 < 15 && Math.min(s.x0, s.x1) < 14 && Math.max(s.x0, s.x1) > 6)).toBe(false);
+    expect(tp.segments.filter((s) => s.cut && s.layer !== fillLayer)).toHaveLength(8);
+  });
+
+  it("sweeps near neighbours together and far ones separately", () => {
+    const s = { pattern: "lines" as const, interval: 1, angle: 0 };
+    const near = fillUnits([[sq(0, 0, 10)], [sq(10.2, 0, 10)]], s, start);
+    expect(near.units).toHaveLength(1);
+    const far = fillUnits([[sq(0, 0, 10)], [sq(60, 0, 10)]], s, start);
+    expect(far.units).toHaveLength(2);
+    // Different rows (one above the other) never share a sweep.
+    expect(fillUnits([[sq(0, 0, 10)], [sq(0, 20, 10)]], s, start).units).toHaveLength(2);
+  });
+
+  it("gives each separate area all of its passes before the next", () => {
+    let d = docOf([path(sq(0, 0, 10), F), path(sq(60, 0, 10), F)]);
+    d = updateLayer(d, F, { mode: "fill", passes: 2, fill: { pattern: "lines", interval: 1, angle: 0 } });
+    const xs = planToolpath(d, { start, innerFirst: true }).segments.filter((s) => s.cut).map((s) => s.x0 < 30);
+    // 20 cuts on the left square (2 passes × 10 rows), then 20 on the right.
+    expect(xs.slice(0, 20).every(Boolean)).toBe(true);
+    expect(xs.slice(20).every((v) => !v)).toBe(true);
+  });
+});
+
+describe("Fill tool and migration", () => {
+  const F = "#00e000";
+  it("fills a region with a new fill colour placed first, clears it on a second click, and refuses cut colours", () => {
+    const d = docOf([path(sq(0, 0, 20), "#ff0000"), path(sq(5, 5, 10), "#ff0000")]);
+    const r = toggleRegionFill(d, "o", 0, F);
+    if ("error" in r) throw new Error(r.error);
+    expect(r.created).toBe(true);
+    expect(r.doc.objects[0]!.paths[0]!.fill).toBe(F);
+    expect(activeLayers(r.doc)[0]).toMatchObject({ color: F, mode: "fill" });
+    const again = toggleRegionFill(r.doc, "o", 0, F);
+    if ("error" in again) throw new Error(again.error);
+    expect(again.cleared).toBe(true);
+    expect(again.doc.objects[0]!.paths[0]!.fill).toBeUndefined();
+    expect("error" in toggleRegionFill(d, "o", 0, "#ff0000")).toBe(true);
+  });
+
+  it("keeps a sketch's fill on its loop when the sketch's paths are regenerated", () => {
+    let s = emptySketch("#ff0000");
+    const ids: string[] = [];
+    for (const q of sq(0, 0, 10)) {
+      const r = addPoint(s, q);
+      s = r.s;
+      ids.push(r.id);
+    }
+    for (let i = 0; i < 4; i++) s = addEntity(s, { kind: "line", p1: ids[i]!, p2: ids[(i + 1) % 4]! }).s;
+    const d: Doc = { objects: [{ id: "k", name: "k", mat: IDENTITY, sketch: s, paths: sketchPaths(s) }], layers: [] };
+    const r = toggleRegionFill(d, "k", 0, F);
+    if ("error" in r) throw new Error(r.error);
+    const k = r.doc.objects[0]!;
+    expect(k.sketch!.fills).toHaveLength(1);
+    // Move a corner: the loop is the same entities, so the regenerated path is still filled.
+    const moved = { ...k.sketch!, points: { ...k.sketch!.points, [ids[2]!]: { x: 14, y: 12 } } };
+    expect(sketchPaths(moved)[0]!.fill).toBe(F);
+  });
+
+  it("turns an old Fill + outline layer into a cut layer plus a fill colour on the same regions", () => {
+    let d = docOf([path(sq(0, 0, 20), "#ff0000"), path(sq(5, 5, 10), "#ff0000"), path(sq(8, 8, 4), "#ff0000")]);
+    d = updateLayer(d, "#ff0000", { mode: "fillCut", speed: 77, fill: { pattern: "cross", interval: 0.3, angle: 45 } });
+    const m = migrateDoc(d);
+    const [outer, hole, island] = m.objects[0]!.paths;
+    const F2 = outer!.fill!;
+    expect(F2).toBeTruthy();
+    expect(hole!.fill).toBeUndefined();
+    expect(island!.fill).toBe(F2);
+    const layers = activeLayers(m);
+    expect(layers[0]).toMatchObject({ color: F2, mode: "fill", speed: 77, fill: { pattern: "cross" } });
+    expect(layers.find((l) => l.color === "#ff0000")!.mode).toBe("cut");
+    expect(migrateDoc(m)).toBe(m); // nothing left to migrate
   });
 });
 

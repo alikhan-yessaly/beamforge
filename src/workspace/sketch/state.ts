@@ -1,5 +1,6 @@
 // Sketch mode: the sketch being edited, its own undo/redo, the active tool and selection, and the solver status.
 // Finishing writes the sketch (and the paths generated from it) back to its object as one project undo step.
+import { t, tp } from "../../i18n";
 import { signal } from "@preact/signals";
 import wasmUrl from "@salusoft89/planegcs/dist/planegcs_dist/planegcs.wasm?url";
 import { type Mat, apply, translate } from "../../geom/geom";
@@ -84,7 +85,7 @@ async function open(objectId: string | null, name: string, mat: Mat, sketch: Ske
   try {
     await loadSolver(wasmUrl);
   } catch (e) {
-    notify(`Could not load the sketch solver: ${e instanceof Error ? e.message : String(e)}`, "error");
+    notify(t("Could not load the sketch solver: {error}", { error: e instanceof Error ? e.message : String(e) }), "error");
     return;
   }
   const a = analyse(sketch);
@@ -104,7 +105,7 @@ async function open(objectId: string | null, name: string, mat: Mat, sketch: Ske
 /** Start a new sketch with its origin at the centre of the bed. */
 export function newSketch(): Promise<void> {
   const p = profile.value;
-  return open(null, "Sketch", translate(p.bedW / 2, p.bedH / 2), emptySketch());
+  return open(null, t("Sketch"), translate(p.bedW / 2, p.bedH / 2), emptySketch());
 }
 
 export function editSketch(o: SceneObject): Promise<void> {
@@ -119,7 +120,7 @@ export function editSketch(o: SceneObject): Promise<void> {
 export function editAsSketch(o: SceneObject): Promise<void> {
   if (o.sketch) return editSketch(o);
   if (o.children?.length) {
-    notify("Ungroup this first: a group can't be edited as one sketch.", "warn");
+    notify(t("Ungroup this first: a group can't be edited as one sketch."), "warn");
     return Promise.resolve();
   }
   const counts = new Map<string, number>();
@@ -127,16 +128,16 @@ export function editAsSketch(o: SceneObject): Promise<void> {
   const color = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "#000000";
   const r = pathsToSketch(o.paths, color);
   if (!r.editable && !r.reference) {
-    notify("Nothing in this drawing can be edited as a sketch.", "warn");
+    notify(t("Nothing in this drawing can be edited as a sketch."), "warn");
     return Promise.resolve();
   }
   if (r.reference)
     notify(
       r.legacy
-        ? `${r.reference} curve${r.reference === 1 ? "" : "s"} can be moved but not reshaped: this drawing was imported before sketches existed. Import the DXF again to edit its arcs and circles.`
-        : `${r.reference} curve${r.reference === 1 ? "" : "s"} (ellipses/splines) can be moved but not reshaped.`,
+        ? tp(["{n} curve can be moved but not reshaped: this drawing was imported before sketches existed. Import the DXF again to edit its arcs and circles.", "{n} curves can be moved but not reshaped: this drawing was imported before sketches existed. Import the DXF again to edit its arcs and circles."], r.reference)
+        : tp(["{n} curve (ellipses/splines) can be moved but not reshaped.", "{n} curves (ellipses/splines) can be moved but not reshaped."], r.reference),
     );
-  if (r.sketch.entities.length > 1500) notify("This is a big drawing; sketch editing may be slow.", "warn");
+  if (r.sketch.entities.length > 1500) notify(t("This is a big drawing; sketch editing may be slow."), "warn");
   return open(o.id, o.name, o.mat, r.sketch);
 }
 
@@ -145,8 +146,8 @@ export function setSketch(next: Sketch, opts: { record?: boolean; solve?: boolea
   const s = session.value;
   if (!s) return;
   const a = opts.solve === false ? { sketch: next, status: s.status } : analyse(next);
-  if (opts.solve !== false && !a.status.ok) notify("That change conflicts with existing constraints (shown in red). Undo or delete a constraint.", "warn");
-  else if (opts.solve !== false && a.status.redundant?.some((id) => !s.status.redundant?.includes(id))) notify("Redundant constraints are shown in red. Select and delete one to resolve the overconstraint.", "warn");
+  if (opts.solve !== false && !a.status.ok) notify(t("That change conflicts with existing constraints (shown in red). Undo or delete a constraint."), "warn");
+  else if (opts.solve !== false && a.status.redundant?.some((id) => !s.status.redundant?.includes(id))) notify(t("Redundant constraints are shown in red. Select and delete one to resolve the overconstraint."), "warn");
   session.value = {
     ...s,
     sketch: a.sketch,
@@ -186,7 +187,7 @@ export function finishSketch(keep: boolean): void {
   const s = session.value;
   if (!s) return;
   if (keep && s.sketch !== s.original && !textReady(s.sketch)) {
-    notify("A font is still loading; try Finish again in a moment.", "warn");
+    notify(t("A font is still loading; try Finish again in a moment."), "warn");
     return;
   }
   editingDimension.value = null;
@@ -211,7 +212,7 @@ export function finishSketch(keep: boolean): void {
 export function cancelSketch(): void {
   const s = session.value;
   if (!s) return;
-  if (s.sketch !== s.original && !window.confirm("Discard the changes to this sketch?")) return;
+  if (s.sketch !== s.original && !window.confirm(t("Discard the changes to this sketch?"))) return;
   finishSketch(false);
 }
 

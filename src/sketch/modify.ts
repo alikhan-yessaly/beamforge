@@ -1,5 +1,6 @@
 // Modify tools (pure): trim, fillet, chamfer, mirror and offset. Each returns a new sketch with the constraints
 // Onshape would add (points on the cutting curve, tangency, symmetry, a dimension for the size), or an error.
+import { t } from "../i18n";
 import type { Vec } from "../geom/geom";
 import {
   type ArcEntity,
@@ -145,7 +146,7 @@ function trimTarget(s: Sketch, id: string, p: Vec):
   | { e: LineEntity | ArcEntity | Extract<Entity, { kind: "circle" }>; lo?: Cut; hi?: Cut; piece: TrimPiece }
   | { error: string } {
   const e = entity(s, id);
-  if (!e || (e.kind !== "line" && e.kind !== "circle" && e.kind !== "arc")) return { error: "Trim works on lines, circles and arcs." };
+  if (!e || (e.kind !== "line" && e.kind !== "circle" && e.kind !== "arc")) return { error: t("Trim works on lines, circles and arcs.") };
   const me = carrierOf(s, e)!;
   const cuts: Cut[] = [];
   for (const o of s.entities) {
@@ -181,7 +182,7 @@ function trimTarget(s: Sketch, id: string, p: Vec):
       if (sorted.at(-1)!.kind === "point" && sorted[0]!.kind !== "point") sorted[0] = { ...sorted.at(-1)!, u: sorted.at(-1)!.u - TAU };
       sorted.pop();
     }
-    if (sorted.length === 1) return { error: "A circle needs two distinct crossings or points to trim between." };
+    if (sorted.length === 1) return { error: t("A circle needs two distinct crossings or points to trim between.") };
     const hi = sorted.find((c) => c.u > u) ?? sorted[0];
     const lo = [...sorted].reverse().find((c) => c.u <= u) ?? sorted[sorted.length - 1];
     const a0 = lo?.u ?? 0;
@@ -277,7 +278,7 @@ const minAbove = (cs: Cut[], u: number) => cs.filter((c) => c.u > u).sort((a, b)
 /** The two lines meeting at a corner point, with their far ends. */
 function corner(s: Sketch, p: string): { l1: LineEntity; l2: LineEntity; a: string; b: string } | { error: string } {
   const lines = s.entities.filter((e): e is LineEntity => e.kind === "line" && !e.construction && (e.p1 === p || e.p2 === p));
-  if (lines.length !== 2) return { error: "Click a corner where exactly two lines meet." };
+  if (lines.length !== 2) return { error: t("Click a corner where exactly two lines meet.") };
   const [l1, l2] = lines as [LineEntity, LineEntity];
   return { l1, l2, a: l1.p1 === p ? l1.p2 : l1.p1, b: l2.p1 === p ? l2.p2 : l2.p1 };
 }
@@ -292,9 +293,9 @@ export function filletAt(s: Sketch, p: string, r: number): Result {
   const u1 = unit(sub(pt(s, k.a), P));
   const u2 = unit(sub(pt(s, k.b), P));
   const half = Math.acos(Math.max(-1, Math.min(1, dot(u1, u2)))) / 2;
-  if (half < 1e-3 || Math.PI / 2 - half < 1e-3) return { error: "Those lines don't make a corner to round." };
+  if (half < 1e-3 || Math.PI / 2 - half < 1e-3) return { error: t("Those lines don't make a corner to round.") };
   const d = r / Math.tan(half);
-  if (d >= len(sub(pt(s, k.a), P)) || d >= len(sub(pt(s, k.b), P))) return { error: "That radius is too big for these lines." };
+  if (d >= len(sub(pt(s, k.a), P)) || d >= len(sub(pt(s, k.b), P))) return { error: t("That radius is too big for these lines.") };
   const T1 = add(P, mul(u1, d));
   const T2 = add(P, mul(u2, d));
   const C = add(P, mul(unit(add(u1, u2)), r / Math.sin(half)));
@@ -322,7 +323,7 @@ export function chamferAt(s: Sketch, p: string, d: number): Result {
   const P = pt(s, p);
   const la = len(sub(pt(s, k.a), P));
   const lb = len(sub(pt(s, k.b), P));
-  if (d >= la || d >= lb) return { error: "That distance is too big for these lines." };
+  if (d >= la || d >= lb) return { error: t("That distance is too big for these lines.") };
   const T1 = add(P, mul(unit(sub(pt(s, k.a), P)), d));
   const T2 = add(P, mul(unit(sub(pt(s, k.b), P)), d));
   let out = dropLengthBound(dropLengthBound(s, k.l1.id), k.l2.id);
@@ -345,7 +346,7 @@ export function chamferAt(s: Sketch, p: string, d: number): Result {
 /** Mirror entities about a line, tied to the originals with symmetric constraints. */
 export function mirrorItems(s: Sketch, ids: string[], lineId: string): Result {
   const axis = entity(s, lineId);
-  if (axis?.kind !== "line") return { error: "Mirror: click a line to mirror about." };
+  if (axis?.kind !== "line") return { error: t("Mirror: click a line to mirror about.") };
   const A = pt(s, axis.p1);
   const B = pt(s, axis.p2);
   const dir = unit(sub(B, A));
@@ -387,7 +388,7 @@ export function mirrorItems(s: Sketch, ids: string[], lineId: string): Result {
     if (e.kind === "circle") out = addConstraint(out, { type: "equal", refs: [e.id, r.id] }).s;
     count++;
   }
-  if (!count) return { error: "Mirror: select lines, circles, arcs, points or splines first (not the mirror line)." };
+  if (!count) return { error: t("Mirror: select lines, circles, arcs, points or splines first (not the mirror line).") };
   return { s: out };
 }
 
@@ -471,16 +472,16 @@ export function offsetDistance(s: Sketch, id: string, p: Vec): number {
 
 /** Offset a chain of lines and arcs (or a circle) by signed distance d. Lines stay parallel at a dimensioned distance. */
 export function offsetAt(s: Sketch, id: string, d: number, prune = true): Result {
-  if (Math.abs(d) < 1e-6) return { error: "Move away from the shape to set the offset." };
+  if (Math.abs(d) < 1e-6) return { error: t("Move away from the shape to set the offset.") };
   const e0 = entity(s, id);
   const base = (e: Entity) => ({ ...(e.construction ? { construction: true } : {}), ...(e.color ? { color: e.color } : {}) });
   if (e0?.kind === "circle") {
     const r = e0.r - d;
-    if (r <= 1e-6) return { error: "The offset is bigger than the circle." };
+    if (r <= 1e-6) return { error: t("The offset is bigger than the circle.") };
     return { s: addEntity(s, { kind: "circle", c: e0.c, r, ...base(e0) }).s };
   }
   const ch = chainOf(s, id);
-  if (!ch) return { error: "Offset works on lines, arcs and circles." };
+  if (!ch) return { error: t("Offset works on lines, arcs and circles.") };
   const { steps, closed } = ch;
   // Each step's offset carrier and naive offset end points.
   const shifted = steps.map((st) => {
@@ -496,7 +497,7 @@ export function offsetAt(s: Sketch, id: string, d: number, prune = true): Result
     const at = (q: Vec) => add(c, mul(unit(sub(q, c)), r));
     return { k: { kind: "circ", c, r } as Carrier, from: at(a), to: at(b), r };
   });
-  if (shifted.some((x, i) => steps[i]!.e.kind === "arc" && x.r <= 1e-6)) return { error: "The offset is bigger than an arc's radius." };
+  if (shifted.some((x, i) => steps[i]!.e.kind === "arc" && x.r <= 1e-6)) return { error: t("The offset is bigger than an arc's radius.") };
   // Joints: where consecutive offsets meet.
   const joint = (i: number, j: number): Vec => {
     const A = shifted[i]!;

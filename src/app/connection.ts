@@ -1,4 +1,5 @@
 // The one connection the page uses, shared by the machine panel (src/main.ts) and the workspace (Preact).
+import { t } from "../i18n";
 import { signal } from "@preact/signals";
 import { JobRunner } from "../controller/jobRunner";
 import { type LinkState, RuidaLink } from "../controller/link";
@@ -43,17 +44,17 @@ export async function refreshBedDimensions(): Promise<void> {
     bedLoad.value = { state: "idle", message: "" };
     return;
   }
-  bedLoad.value = { state: "loading", message: "Reading machine bed dimensions…" };
+  bedLoad.value = { state: "loading", message: t("Reading machine bed dimensions…") };
   try {
     const bed = await readBedDimensions(link, () => request === bedRequest);
     if (request !== bedRequest || !link.verified) return;
     motion.bed = { x: Math.round(bed.width * 1000), y: Math.round(bed.height * 1000) };
     profile.value = { ...profile.value, bedW: bed.width, bedH: bed.height };
-    bedLoad.value = { state: "ready", message: `Machine bed: ${bed.width} × ${bed.height} mm` };
+    bedLoad.value = { state: "ready", message: t("Machine bed: {w} × {h} mm", { w: bed.width, h: bed.height }) };
   } catch (e) {
     if (request !== bedRequest || !link.verified) return;
     motion.bed = null;
-    bedLoad.value = { state: "error", message: `Could not read machine bed dimensions: ${e instanceof Error ? e.message : String(e)}` };
+    bedLoad.value = { state: "error", message: t("Could not read machine bed dimensions: {error}", { error: e instanceof Error ? e.message : String(e) }) };
   }
 }
 link.onStateChange((s) => {
@@ -94,16 +95,16 @@ export async function connectAndVerify(opts: { chooser?: boolean } = {}): Promis
   try {
     if (opts.chooser) usb.forceChooser = true;
     if (!transport.isOpen) await link.connect();
-    const where = transport.kind === "sim" ? "the simulator" : transport.kind === "bridge" ? `the bridge (${bridge.portName})` : "USB";
+    const where = transport.kind === "sim" ? t("the simulator") : transport.kind === "bridge" ? t("the bridge ({port})", { port: bridge.portName ?? "" }) : "USB";
     const id = await link.verify();
     if (id === null) {
-      connMessage.value = `Connected to ${where}, but the Card ID did not decode. Check the controller model (Machine tab, developer mode), cable and power.`;
+      connMessage.value = t("Connected to {where}, but the Card ID did not decode. Check the controller model (Machine tab, developer mode), cable and power.", { where });
       return false;
     }
-    connMessage.value = `Connected to ${where}; Card ID 0x${id.toString(16)} verified.`;
+    connMessage.value = t("Connected to {where}; Card ID {id} verified.", { where, id: `0x${id.toString(16)}` });
     return true;
   } catch (e) {
-    connMessage.value = `Could not connect: ${errText(e)}`;
+    connMessage.value = t("Could not connect: {error}", { error: errText(e) });
     return false;
   } finally {
     connBusy.value = false;
@@ -113,7 +114,7 @@ export async function connectAndVerify(opts: { chooser?: boolean } = {}): Promis
 export async function disconnectMachine(): Promise<void> {
   if (runner.active && !window.confirm("A job is running. Disconnecting does not stop it. Disconnect anyway?")) return;
   await link.disconnect();
-  connMessage.value = "Disconnected.";
+  connMessage.value = t("Disconnected.");
 }
 
 // ---------- Live head position, polled only while some view watches it ----------

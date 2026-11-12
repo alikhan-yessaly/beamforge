@@ -1,12 +1,19 @@
 // Layers: cut settings keyed by path colour. Pure functions over the document.
+import { t } from "../i18n";
 import { DEFAULT_LAYER, type Doc, type Layer, type LayerMode, type SceneObject, type ScenePath } from "../scene/model";
 import { DEFAULT_FILL } from "./fill";
-import { closedEntityIds, sketchPaths, textReady } from "../sketch/paths";
+import { closedEntityIds, setSketchFill, sketchPaths, textReady } from "../sketch/paths";
+import { containment } from "./regions";
 
 /** Colours used by the document's paths, in first-seen order. */
 export function colorsInUse(doc: Doc): string[] {
   const seen = new Set<string>();
-  for (const o of doc.objects) for (const p of o.paths) seen.add(p.color);
+  for (const o of doc.objects) {
+    for (const p of o.paths) {
+      seen.add(p.color);
+      if (p.fill) seen.add(p.fill);
+    }
+  }
   return [...seen];
 }
 
@@ -29,7 +36,12 @@ export function visibleDocument(doc: Doc): Doc {
   return {
     ...doc,
     objects: doc.objects
-      .map((o) => ({ ...o, paths: o.paths.filter((p) => !hidden.has(p.color)) }))
+      .map((o) => ({
+        ...o,
+        paths: o.paths
+          .map((p): ScenePath => (p.fill && hidden.has(p.fill) ? withFill(p, null) : p))
+          .filter((p) => !hidden.has(p.color) || p.fill),
+      }))
       .filter((o) => o.paths.length > 0),
   };
 }
@@ -171,4 +183,80 @@ function recolorSketch(o: SceneObject, pick: (p: ScenePath) => boolean, color: s
   // A text font not loaded yet: keep the stored outlines and just recolour them (no text may go missing).
   if (!textReady(sketch)) return { obj: { ...o, sketch, paths: o.paths.map((p) => (pick(p) ? { ...p, color } : p)) }, changed };
   return { obj: { ...o, sketch, paths: sketchPaths(sketch) }, changed };
+}
+
+// ---------- Fill tool ----------
+
+/** Put a fill colour first in the cut order (engrave before cutting parts free). */
+function toFront(doc: Doc, color: string): Doc {
+  const order = activeLayers(doc);
+  const i = order.findIndex((l) => l.color === color);
+  return i <= 0 ? doc : withActive(doc, [order[i]!, ...order.filter((_, k) => k !== i)]);
+}
+
+/** Colours some path is drawn (stroked) in. */
+const strokeColors = (doc: Doc) => new Set(doc.objects.flatMap((o) => o.paths.map((p) => p.color)));
+
+/** Set one path's region fill in an object (sketches keep it on the loop, so it survives editing). */
+function withPathFill(o: SceneObject, i: number, color: string | null): SceneObject {
+  const p = o.paths[i]!;
+  if (o.sketch && p.src) {
+    const sketch = setSketchFill(o.sketch, p.src, color);
+    const paths = textReady(sketch) ? sketchPaths(sketch) : o.paths.map((q, k) => (k === i ? withFill(q, color) : q));
+    return { ...o, sketch, paths };
+  }
+  return { ...o, paths: o.paths.map((q, k) => (k === i ? withFill(q, color) : q)) };
+}
+const withFill = (p: ScenePath, color: string | null): ScenePath => {
+  if (color) return { ...p, fill: color };
+  const { fill: _f, ...rest } = p;
+  return rest;
+};
+
+/**
+ * Fill tool: fill the region of closed path `pathIndex` of object `objectId` with `color`, or clear it when it
+ * already has that colour. A colour new to the document becomes a fill layer (engraving defaults, first in the
+ * order); a colour used for cutting lines is refused.
+ */
+export function toggleRegionFill(doc: Doc, objectId: string, pathIndex: number, color: string): { doc: Doc; created: boolean; cleared: boolean } | { error: string } {
+  const o = doc.objects.find((x) => x.id === objectId);
+  const p = o?.paths[pathIndex];
+  if (!o || !p || !p.closed) return { error: t("Only closed shapes can be filled.") };
+  if (p.fill === color) return { doc: { ...doc, objects: doc.objects.map((x) => (x === o ? withPathFill(o, pathIndex, null) : x)) }, created: false, cleared: true };
+  const layer = activeLayers(doc).find((l) => l.color === color) ?? (doc.layers ?? []).find((l) => l.color === color);
+  if ((layer?.mode ?? "cut") === "cut" && strokeColors(doc).has(color)) return { error: t("That colour cuts lines. Pick another colour for fills, or set its layer to Fill.") };
+  let next: Doc = { ...doc, objects: doc.objects.map((x) => (x === o ? withPathFill(o, pathIndex, color) : x)) };
+  const created = !layer;
+  if (!layer) next = toFront(updateLayer(next, color, NEW_FILL_LAYER), color);
+  else if ((layer.mode ?? "cut") !== "fill") next = updateLayer(next, color, { mode: "fill", fill: layer.fill ?? { ...DEFAULT_FILL } });
+  return { doc: next, created, cleared: false };
+}
+
+/**
+ * Older documents: a "Fill + outline" layer becomes a cut layer for the outlines plus a new fill colour (same speed,
+ * power and fill settings) on the regions it used to engrave (outermost shapes, and islands inside holes).
+ */
+export function migrateDoc(doc: Doc): Doc {
+  let next = doc;
+  for (const layer of doc.layers ?? []) {
+    if (layer.mode !== "fillCut") continue;
+    const C = layer.color;
+    const taken = new Set([...colorsInUse(next), ...(next.layers ?? []).map((l) => l.color)]);
+    const F = PALETTE.find((c) => !taken.has(c)) ?? PALETTE[PALETTE.length - 1]!;
+    const objects = next.objects.map((o) => {
+      const parent = containment(o.paths);
+      let out = o;
+      o.paths.forEach((p, i) => {
+        if (p.color !== C || !p.closed) return;
+        let depth = 0;
+        for (let j = parent[i]!; j >= 0; j = parent[j]!) if (o.paths[j]!.color === C) depth++;
+        if (depth % 2 === 0) out = withPathFill(out, i, F);
+      });
+      return out;
+    });
+    next = { ...next, objects, layers: (next.layers ?? []).map((l) => (l.color === C ? { ...l, mode: "cut" as const } : l)) };
+    const { color: _c, ...settings } = layer;
+    next = toFront(updateLayer(next, F, { ...settings, mode: "fill" }), F);
+  }
+  return next;
 }

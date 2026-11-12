@@ -1,16 +1,17 @@
+import { t } from "../i18n";
 import { ADDR_BED_X, ADDR_BED_Y, readMemory } from "../protocol/encode";
 import type { RuidaLink } from "../controller/link";
 import type { OriginCorner } from "../scene/model";
 
 export async function readBedDimensions(link: RuidaLink, isCurrent: () => boolean = () => true): Promise<{ width: number; height: number }> {
-  if (!link.verified) throw new Error("Verify the controller before reading bed dimensions");
+  if (!link.verified) throw new Error(t("Verify the controller before reading bed dimensions"));
   const read = async (addr: number) => {
-    if (!isCurrent() || !link.verified) throw new Error("Controller connection changed during bed read");
+    if (!isCurrent() || !link.verified) throw new Error(t("Controller connection changed during bed read"));
     const reply = (await link.query(readMemory(addr), 1000, "bed dimensions")).find((r) => r.addr === addr);
-    if (!isCurrent() || !link.verified) throw new Error("Controller connection changed during bed read");
-    if (!reply) throw new Error(`No reply for bed ${addr === ADDR_BED_X ? "width" : "height"}`);
+    if (!isCurrent() || !link.verified) throw new Error(t("Controller connection changed during bed read"));
+    if (!reply) throw new Error(addr === ADDR_BED_X ? t("No reply for the bed width") : t("No reply for the bed height"));
     if (!Number.isSafeInteger(reply.value) || reply.value <= 0 || reply.value === 0xf2390000) {
-      throw new Error(`Invalid bed ${addr === ADDR_BED_X ? "width" : "height"} returned by controller`);
+      throw new Error(addr === ADDR_BED_X ? t("The controller returned an invalid bed width") : t("The controller returned an invalid bed height"));
     }
     return reply.value / 1000;
   };
@@ -35,6 +36,6 @@ export function parseMachineOrigins(raw: string | null): SavedMachineOrigin[] {
     return typeof entry.name === "string" && entry.name.trim().length > 0 &&
       typeof entry.cardId === "number" && Number.isSafeInteger(entry.cardId) && entry.cardId >= 0 &&
       typeof entry.origin === "string" && origins.some((origin) => origin === entry.origin);
-  })) throw new Error("Saved machine origins are invalid");
+  })) throw new Error(t("Saved machine origins are invalid"));
   return value as SavedMachineOrigin[];
 }

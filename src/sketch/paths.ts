@@ -92,49 +92,75 @@ const same = (a: Vec, b: Vec) => Math.abs(a.x - b.x) < JOIN && Math.abs(a.y - b.
 
 /** Join open polylines that meet end to end into longer ones; mark loops closed. */
 export function chain(polys: { pts: Vec[]; closed: boolean }[]): { pts: Vec[]; closed: boolean }[] {
-  const done: { pts: Vec[]; closed: boolean }[] = polys.filter((p) => p.closed);
-  const open = polys.filter((p) => !p.closed && p.pts.length >= 2).map((p) => [...p.pts]);
+  return chainTagged(polys.map((p) => ({ ...p, ids: [] }))).map(({ pts, closed }) => ({ pts, closed }));
+}
+
+/** `chain`, keeping track of which tagged pieces (entity ids) each result is made of. */
+function chainTagged(polys: { pts: Vec[]; closed: boolean; ids: string[] }[]): { pts: Vec[]; closed: boolean; ids: string[] }[] {
+  const done = polys.filter((p) => p.closed);
+  const open = polys.filter((p) => !p.closed && p.pts.length >= 2).map((p) => ({ pts: [...p.pts], ids: p.ids }));
   while (open.length) {
-    let cur = open.shift()!;
+    const first = open.shift()!;
+    let cur = first.pts;
+    const ids = [...first.ids];
     for (let grew = true; grew; ) {
       grew = false;
       for (let i = 0; i < open.length; i++) {
-        const o = open[i]!;
+        const o = open[i]!.pts;
         const [cs, ce, os, oe] = [cur[0]!, cur.at(-1)!, o[0]!, o.at(-1)!];
         if (same(ce, os)) cur = [...cur, ...o.slice(1)];
         else if (same(ce, oe)) cur = [...cur, ...[...o].reverse().slice(1)];
         else if (same(cs, oe)) cur = [...o, ...cur.slice(1)];
         else if (same(cs, os)) cur = [...[...o].reverse(), ...cur.slice(1)];
         else continue;
+        ids.push(...open[i]!.ids);
         open.splice(i, 1);
         grew = true;
         break;
       }
     }
     const closed = cur.length > 2 && same(cur[0]!, cur.at(-1)!);
-    done.push({ pts: cur, closed });
+    done.push({ pts: cur, closed, ids });
   }
   return done;
 }
 
 /** All cut paths of a sketch, grouped by layer colour. Closed paths drop their repeated end point. */
 export function sketchPaths(s: Sketch): ScenePath[] {
-  const byColor = new Map<string, { pts: Vec[]; closed: boolean }[]>();
+  const byColor = new Map<string, { pts: Vec[]; closed: boolean; ids: string[] }[]>();
   for (const e of s.entities) {
     if (e.construction || e.kind === "point") continue;
     const color = e.color ?? s.color;
     const list = byColor.get(color) ?? [];
-    list.push(...entityPolylines(s, e));
+    // Text has one closed contour per glyph part: tag each so a single letter's region can be filled.
+    entityPolylines(s, e).forEach((p, k) => list.push({ ...p, ids: [e.kind === "text" ? `${e.id}#${k}` : e.id] }));
     byColor.set(color, list);
   }
+  const fills = new Map((s.fills ?? []).map((f) => [loopKey(f.loop), f.color]));
   const out: ScenePath[] = [];
   for (const [color, polys] of byColor) {
-    for (const p of chain(polys)) {
+    for (const p of chainTagged(polys)) {
       const pts = p.closed && p.pts.length > 1 && same(p.pts[0]!, p.pts.at(-1)!) ? p.pts.slice(0, -1) : p.pts;
-      if (pts.length >= 2) out.push({ color, closed: p.closed, points: pts });
+      if (pts.length < 2) continue;
+      if (!p.closed) {
+        out.push({ color, closed: false, points: pts });
+        continue;
+      }
+      const src = [...p.ids].sort();
+      const fill = fills.get(loopKey(src));
+      out.push({ color, closed: true, points: pts, src, ...(fill ? { fill } : {}) });
     }
   }
   return out;
+}
+
+export const loopKey = (ids: readonly string[]) => [...ids].sort().join(",");
+
+/** Set (or clear, with null) the fill of the loop `src` in a sketch. */
+export function setSketchFill(s: Sketch, src: readonly string[], color: string | null): Sketch {
+  const key = loopKey(src);
+  const rest = (s.fills ?? []).filter((f) => loopKey(f.loop) !== key);
+  return { ...s, fills: color ? [...rest, { loop: [...src].sort(), color }] : rest };
 }
 
 /** Ids of non-construction entities that lie on closed loops (circles, or chains whose ends all meet). */

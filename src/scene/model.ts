@@ -10,6 +10,13 @@ export interface ScenePath extends Polyline {
    * (ellipses, splines). Used by "Edit as sketch". Absent on paths from elsewhere.
    */
   segs?: Seg[] | null;
+  /**
+   * Fill colour for the area this closed path encloses, minus the closed paths directly inside it (holes). Set with
+   * the Fill tool; engraved by that colour's fill layer, independent of how the outline itself is cut.
+   */
+  fill?: string;
+  /** Sketch objects: the entity ids forming this closed loop (sorted), so fills survive regenerating the paths. */
+  src?: string[];
 }
 
 /**

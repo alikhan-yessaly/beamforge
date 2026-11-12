@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { moveAbs, moveRel, rapidMoveRel, REL_MAX_UM, setSpeed } from "../protocol/encode";
 
 /**
@@ -33,11 +34,11 @@ export interface JogCommand {
 
 export function buildJog(req: JogRequest): JogCommand {
   const { dxMm, dyMm } = req;
-  if (!Number.isFinite(dxMm) || !Number.isFinite(dyMm)) throw new Error("Step must be a number");
-  if (Math.abs(dxMm) > MAX_JOG_MM || Math.abs(dyMm) > MAX_JOG_MM) throw new Error(`Step limited to ${MAX_JOG_MM} mm`);
+  if (!Number.isFinite(dxMm) || !Number.isFinite(dyMm)) throw new Error(t("Step must be a number"));
+  if (Math.abs(dxMm) > MAX_JOG_MM || Math.abs(dyMm) > MAX_JOG_MM) throw new Error(t("Step limited to {max} mm", { max: MAX_JOG_MM }));
   const parts: Uint8Array[] = [];
   if (req.speedMmS != null) {
-    if (!(req.speedMmS > 0 && req.speedMmS <= 500)) throw new Error("Speed must be 0-500 mm/s");
+    if (!(req.speedMmS > 0 && req.speedMmS <= 500)) throw new Error(t("Speed must be 0–{max} mm/s", { max: 500 }));
     parts.push(setSpeed(req.speedMmS));
   }
   const dx = Math.round(dxMm * 1000);
@@ -59,7 +60,7 @@ export function buildJog(req: JogRequest): JogCommand {
       doneY += y;
     }
   } else {
-    if (!req.fromUm) throw new Error("Absolute jog needs the current position: read the position first");
+    if (!req.fromUm) throw new Error(t("Absolute jog needs the current position: read the position first"));
     targetUm = { x: req.fromUm.x + dx, y: req.fromUm.y + dy };
     parts.push(moveAbs(targetUm.x, targetUm.y));
   }

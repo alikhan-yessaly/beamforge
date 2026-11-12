@@ -9,8 +9,11 @@
 
 ## What it does
 
-- Import DXF drawings or create parametric sketches.
-- Arrange shapes on a machine bed, configure layers, and preview jobs.
+- Import DXF drawings or create parametric sketches (dimensions, constraints, fillets, patterns, text), and edit
+  imported DXF files as sketches.
+- Arrange shapes on a machine bed, configure layers, and preview jobs. Cut outlines and engrave areas with
+  separate speed and power: the Fill tool fills any closed area in a colour of its own.
+- Use the interface in English, Kazakh or Russian.
 - Frame and run jobs over USB with supported desktop browsers.
 - Save projects locally and try the workspace with a simulator.
 
@@ -24,6 +27,8 @@ Check the controller model, bed dimensions, origin, material and job placement
 before operating. Frame the job and use conservative settings appropriate to
 your machine and material. A result in the simulator does not prove a job is
 safe or correct on hardware. Stop using the app if behavior is unexpected.
+Before each job, review the safety reminders and confirm them with
+**Confirm and start**; the app cannot verify those physical conditions.
 
 Only one RDC644XS machine has been tested. Compatibility with other machines,
 firmware and controllers is not established. Fill, sketch-generated cuts,

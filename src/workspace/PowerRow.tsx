@@ -3,6 +3,7 @@
 // How a Ruida uses them: at or below the controller's start speed (a machine setting, often 10 mm/s; corners
 // and line ends) it fires at the corner power (`minPower`), rising linearly to the power (`maxPower`) at the
 // layer speed. Linked = corner power follows power (constant power, the usual choice for cutting).
+import { t } from "../i18n";
 import { Flame, Link2, Unlink2 } from "lucide-preact";
 import { NumberInput } from "../ui/NumberInput";
 import { IconButton } from "../ui/icons";
@@ -29,8 +30,8 @@ export function PowerRamp(props: { min: number; max: number; speed: number }) {
   const pts = `2,${y(props.min)} ${xs},${y(props.min)} ${w - 2},${y(props.speed > ASSUMED_START_SPEED ? props.max : props.min)}`;
   const note =
     props.speed > ASSUMED_START_SPEED
-      ? `Power vs speed: ${props.min} % at corners (at or below the machine's start speed, often ${ASSUMED_START_SPEED} mm/s), rising to ${props.max} % at ${props.speed} mm/s.`
-      : `At ${props.speed} mm/s (not above the machine's start speed, often ${ASSUMED_START_SPEED} mm/s) the laser stays at the corner power, ${props.min} %.`;
+      ? t("Power vs speed: {min} % at corners (at or below the machine's start speed, often {start} mm/s), rising to {max} % at {speed} mm/s.", { min: props.min, start: ASSUMED_START_SPEED, max: props.max, speed: props.speed })
+      : t("At {speed} mm/s (not above the machine's start speed, often {start} mm/s) the laser stays at the corner power, {min} %.", { speed: props.speed, start: ASSUMED_START_SPEED, min: props.min });
   return (
     <svg class="ws-ramp" width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={note}>
       <title>{note}</title>
@@ -44,13 +45,11 @@ export function PowerRow(props: { min: number; max: number; speed: number; linke
   return (
     <div class="ws-power">
       <Flame size={14} strokeWidth={1.75} aria-hidden="true" />
-      <PctInput value={props.max} label="Power at full speed (% of the tube's maximum)" onCommit={(maxPower) => props.onChange({ maxPower })} />
+      <PctInput value={props.max} label={t("Power at full speed (% of the tube's maximum)")} onCommit={(maxPower) => props.onChange({ maxPower })} />
       <em>%</em>
-      <span class="ws-power-corner" title="Corner power: used at or below the machine's start speed (corners, line ends), rising to the power at full speed. Too high burns corners; too low may not fire there.">
-        corners
-        <PctInput
+      <span class="ws-power-corner" title={t("Corner power: used at or below the machine's start speed (corners, line ends), rising to the power at full speed. Too high burns corners; too low may not fire there.")}>{t("corners")}<PctInput
           value={props.min}
-          label="Corner power (%)"
+          label={t("Corner power (%)")}
           disabled={props.linked}
           onCommit={(minPower) => props.onChange({ minPower, linkPower: false })}
         />
@@ -58,7 +57,7 @@ export function PowerRow(props: { min: number; max: number; speed: number; linke
       </span>
       <IconButton
         icon={props.linked ? Link2 : Unlink2}
-        label={props.linked ? "Corner power follows power (constant power): on. Click to set a lower corner power." : "Corner power follows power: off. Click to link it to power."}
+        label={props.linked ? t("Corner power follows power (constant power): on. Click to set a lower corner power.") : t("Corner power follows power: off. Click to link it to power.")}
         pressed={props.linked}
         onClick={() => props.onChange({ linkPower: !props.linked })}
       />

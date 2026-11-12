@@ -1,4 +1,5 @@
 // Mouse and keyboard in sketch mode. The canvas forwards events here while a sketch is being edited.
+import { t } from "../../i18n";
 import { signal } from "@preact/signals";
 import { type Vec, apply, invert } from "../../geom/geom";
 import { type ConstraintTool, applyConstraint, dimensionAnchor, dimensionCanDrive, dimensionFor } from "../../sketch/constrain";
@@ -228,7 +229,7 @@ function sketchPointerDownImpl(e: PointerEvent, screen: Vec, bed: Vec): void {
       chainFrom = { pos: end, snap: { kind: "point", id: chainFrom.snap.id, pos: end } };
     }
     if (Math.hypot(c.pos.x - chainFrom.pos.x, c.pos.y - chainFrom.pos.y) < 1e-6) {
-      notify("Choose a different endpoint for the line.", "warn");
+      notify(t("Choose a different endpoint for the line."), "warn");
       return;
     }
     const r = drawLine(s, chainFrom, c, o);
@@ -263,7 +264,7 @@ function sketchPointerDownImpl(e: PointerEvent, screen: Vec, bed: Vec): void {
       if (clicks.length < 3) return;
       const r = drawArc3(s, clicks[0]!, clicks[1]!, clicks[2]!.pos, o);
       if (r) setSketch(r.s);
-      else notify("Those three points are in a line; no arc goes through them.", "warn");
+      else notify(t("Those three points are in a line; no arc goes through them."), "warn");
       done();
       return;
     }
@@ -282,7 +283,7 @@ function sketchPointerDownImpl(e: PointerEvent, screen: Vec, bed: Vec): void {
         const from = c.snap?.kind === "point" ? c.snap.id : null;
         const along = from ? s.entities.find((x) => (x.kind === "line" && (x.p1 === from || x.p2 === from)) || (x.kind === "arc" && (x.start === from || x.end === from))) : undefined;
         if (!along) {
-          notify("Tangent arc: start on the end of a line or arc.");
+          notify(t("Tangent arc: start on the end of a line or arc."));
           clicks = [];
         }
         return;
@@ -309,11 +310,11 @@ function sketchPointerDownImpl(e: PointerEvent, screen: Vec, bed: Vec): void {
       dimPicked = [];
       preview.value = { shapes: [], hover: null };
       if (!d) {
-        notify("Nothing to dimension there: pick a line, circle, arc, or two points/lines.");
+        notify(t("Nothing to dimension there: pick a line, circle, arc, or two points/lines."));
         return;
       }
       if (!dimensionCanDrive(s, d)) {
-        notify("This dimension is already constrained and cannot be changed.", "warn");
+        notify(t("This dimension is already constrained and cannot be changed."), "warn");
         return;
       }
       const r = addConstraint(s, d);
@@ -340,7 +341,7 @@ export function sketchPointerMove(e: PointerEvent, screen: Vec, bed: Vec): void 
       attachment = !e.shiftKey && r.ok ? attachmentFor(r.sketch, new Set([drag.id])) : null;
       drag.current = r.sketch;
       setSketch(drag.current, { record: false, solve: false });
-      preview.value = { shapes: snapShape(attachment?.snap ?? null), hover: null, ...(attachment ? { hint: "Release to attach · hold Shift to move without attaching" } : {}) };
+      preview.value = { shapes: snapShape(attachment?.snap ?? null), hover: null, ...(attachment ? { hint: t("Release to attach · hold Shift to move without attaching") } : {}) };
     } else if (drag.kind === "entity") {
       const g = drag;
       const d = { x: p.x - g.start.x, y: p.y - g.start.y };
@@ -353,7 +354,7 @@ export function sketchPointerMove(e: PointerEvent, screen: Vec, bed: Vec): void 
       attachment = !e.shiftKey && r.ok ? attachmentFor(r.sketch, ids) : null;
       g.current = r.sketch;
       setSketch(g.current, { record: false, solve: false });
-      preview.value = { shapes: snapShape(attachment?.snap ?? null), hover: null, ...(attachment ? { hint: "Release to attach · hold Shift to move without attaching" } : {}) };
+      preview.value = { shapes: snapShape(attachment?.snap ?? null), hover: null, ...(attachment ? { hint: t("Release to attach · hold Shift to move without attaching") } : {}) };
     } else if (drag.kind === "label") {
       const d = { x: p.x - drag.start.x, y: p.y - drag.start.y };
       const id = drag.id;
@@ -439,7 +440,7 @@ export function sketchPointerMove(e: PointerEvent, screen: Vec, bed: Vec): void 
       preview.value = {
         shapes,
         hover: nearestPoint(s, p, tol()) ?? nearestEntity(s, p, tol()),
-        hint: locked ? "Already constrained: this dimension cannot be changed" : dimPicked.length >= 2 ? "Click to place the dimension" : "Click another item, or click where the dimension goes",
+        hint: locked ? t("Already constrained: this dimension cannot be changed") : dimPicked.length >= 2 ? t("Click to place the dimension") : t("Click another item, or click where the dimension goes"),
       };
       return;
     default:

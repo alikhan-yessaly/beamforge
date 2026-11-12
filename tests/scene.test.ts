@@ -7,10 +7,12 @@ import {
   duplicateSelected,
   groupSelected,
   mirror,
+  objectScale,
   objectBox,
   pasteObjects,
   rotateAbout,
   selectionBox,
+  setObjectScale,
   setSelectionBox,
   transformSelected,
   ungroupSelected,
@@ -167,5 +169,25 @@ describe("importDxf", () => {
     // DXF end point (4,2) is up-right of the start, so on screen (y down) it is the top-right corner.
     const pts = object!.paths[0]!.points;
     expect(pts[1]!.y).toBeLessThan(pts[0]!.y);
+  });
+});
+
+describe("object scale", () => {
+  const prof: MachineProfile = { name: "t", bedW: 600, bedH: 400, origin: "top-left", travelSpeed: 100, accel: 2000 };
+  it("reads and sets an object's own scale about the anchor, keeping its rotation", () => {
+    let d: Doc = { objects: [rect("a", 20, 10, 50, 50)], layers: [] };
+    d = transformSelected(d, new Set(["a"]), rotateAbout({ x: 60, y: 55 }, 90));
+    expect(objectScale(d.objects[0]!).sx).toBeCloseTo(1, 9);
+    const before = objectBox(d.objects[0]!);
+    const e = setObjectScale(d, "a", 1.5, 1.5, prof, { fx: 0, fy: 0 });
+    const o = e.objects[0]!;
+    expect(objectScale(o).sx).toBeCloseTo(1.5, 9);
+    expect(objectScale(o).sy).toBeCloseTo(1.5, 9);
+    const after = objectBox(o);
+    // Top-left anchor stays; rotated 90°, the 20 × 10 drawing is 10 wide and 20 tall, now 15 × 30.
+    expect(after.minX).toBeCloseTo(before.minX, 9);
+    expect(after.minY).toBeCloseTo(before.minY, 9);
+    expect(after.maxX - after.minX).toBeCloseTo(15, 9);
+    expect(after.maxY - after.minY).toBeCloseTo(30, 9);
   });
 });

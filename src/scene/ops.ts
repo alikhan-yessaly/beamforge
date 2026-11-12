@@ -184,3 +184,24 @@ export function outsideBed(doc: Doc, profile: MachineProfile): boolean {
     return b.minX < -1e-6 || b.minY < -1e-6 || b.maxX > profile.bedW + 1e-6 || b.maxY > profile.bedH + 1e-6;
   });
 }
+
+/** An object's own scale (1 = drawn size): the lengths of its matrix's axes (mirroring and rotation aside). */
+export function objectScale(o: SceneObject): { sx: number; sy: number } {
+  return { sx: Math.hypot(o.mat[0], o.mat[1]), sy: Math.hypot(o.mat[2], o.mat[3]) };
+}
+
+/**
+ * Set one object's scale (1 = drawn size) along its own axes, keeping rotation and mirroring, with the selection
+ * anchor point staying where it is.
+ */
+export function setObjectScale(doc: Doc, id: string, sx: number, sy: number, profile: MachineProfile, anchor: Anchor): Doc {
+  const o = doc.objects.find((x) => x.id === id);
+  if (!o || sx <= 0 || sy <= 0) return doc;
+  const cur = objectScale(o);
+  if (cur.sx < 1e-12 || cur.sy < 1e-12) return doc;
+  const before = anchorPoint(profile, objectBox(o), anchor);
+  const scaled: SceneObject = { ...o, mat: mul(o.mat, scale(sx / cur.sx, sy / cur.sy)) };
+  const after = anchorPoint(profile, objectBox(scaled), anchor);
+  const moved: SceneObject = { ...scaled, mat: mul(translate(before.x - after.x, before.y - after.y), scaled.mat) };
+  return { ...doc, objects: doc.objects.map((x) => (x.id === id ? moved : x)) };
+}

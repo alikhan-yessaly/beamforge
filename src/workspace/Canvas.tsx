@@ -6,6 +6,8 @@ import { commit, cursor, doc, prefs, profile, selBox, selection } from "../scene
 import { importFiles } from "./actions";
 import { preview as sketchPreview, resetTool as resetSketchTool, sketchDoubleClick, sketchPointerDown, sketchPointerMove, sketchPointerUp } from "./sketch/controller";
 import { drawSketch } from "./sketch/render";
+import { lang } from "../i18n";
+import { fillClick, fillHover, fillTool, hoverRings, regionUnder } from "./fillTool";
 import { fontsVersion } from "./sketch/fonts";
 import { DimensionEditor, TextEditor } from "./sketch/SketchToolbar";
 import { closeTextEditor, dimensionSuggestions, editSketch, editingText, session as sketchSession } from "./sketch/state";
@@ -84,6 +86,10 @@ export function Canvas() {
   const skPreview = sketchPreview.value;
   const skSuggestions = dimensionSuggestions.value;
   void fontsVersion.value; // redraw sketch text once its font has loaded
+  void lang.value; // canvas labels follow the interface language
+  const ft = fillTool.value;
+  void fillHover.value;
+  const fillPreview = ft ? hoverRings() : null;
 
   useEffect(() => {
     if (bedStatus === "ready") fitBed(profile.value);
@@ -102,7 +108,7 @@ export function Canvas() {
       const others = { ...d, objects: d.objects.filter((o) => o.id !== ses.objectId) };
       draw(ctx, size.w, size.h, dpr, v, others, p, { selection: new Set(), selBox: null, hover: null, marquee: null, dimObjects: true });
       drawSketch(ctx, v, ses, skPreview, skSuggestions);
-    } else draw(ctx, size.w, size.h, dpr, v, d, p, { selection: sel, selBox: sb, hover, marquee, preview: pvData, head, projectedHead, jobOrigin });
+    } else draw(ctx, size.w, size.h, dpr, v, d, p, { selection: sel, selBox: sb, hover, marquee, preview: pvData, head, projectedHead, jobOrigin, fillHover: ft && fillPreview ? { rings: fillPreview, color: ft.color } : null });
   });
 
   useEffect(() => {
@@ -203,6 +209,10 @@ export function Canvas() {
       return;
     }
     if (e.button !== 0) return;
+    if (fillTool.value) {
+      fillClick(bed);
+      return;
+    }
     const h = handleAt(s);
     const b = selBox.value;
     if (h === "rotate" && b) {
@@ -244,6 +254,12 @@ export function Canvas() {
     const g = drag.current;
     if (sketchSession.value && g?.kind !== "pan") {
       sketchPointerMove(e, s, bed);
+      return;
+    }
+    if (fillTool.value && !g) {
+      const r = regionUnder(bed);
+      const cur = fillHover.value;
+      if (r?.objectId !== cur?.objectId || r?.index !== cur?.index) fillHover.value = r;
       return;
     }
     if (!g) {
@@ -377,7 +393,7 @@ export function Canvas() {
       <canvas
         ref={ref}
         tabIndex={0}
-        style={{ width: `${size.w}px`, height: `${size.h}px`, cursor: ses ? (ses.tool === "select" ? "default" : "crosshair") : cursorStyle }}
+        style={{ width: `${size.w}px`, height: `${size.h}px`, cursor: ses ? (ses.tool === "select" ? "default" : "crosshair") : ft ? "cell" : cursorStyle }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

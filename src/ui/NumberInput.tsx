@@ -1,6 +1,7 @@
 // One number field for the whole app: type and press Enter (or leave the field) to commit, Esc to revert,
 // ↑/↓ to step (Shift ×10, Alt ÷10) and the mouse wheel to step while the field has focus. Steps commit at once,
 // so whatever depends on the value (estimate, preview) updates live. Simple arithmetic is allowed: "100/3", "20+5".
+import { t as tr } from "../i18n";
 import { useEffect, useRef, useState } from "preact/hooks";
 
 export interface NumberInputProps {
@@ -68,8 +69,8 @@ export function NumberInput(p: NumberInputProps) {
   };
   const commit = (v: number) => {
     const q = latest.current;
-    if (q.min !== undefined && v < q.min) return q.onInvalid?.(`${q.label} must be at least ${q.min}.`);
-    if (q.max !== undefined && v > q.max) return q.onInvalid?.(`${q.label} must be at most ${q.max}.`);
+    if (q.min !== undefined && v < q.min) return q.onInvalid?.(tr("{field} must be at least {min}.", { field: q.label, min: q.min }));
+    if (q.max !== undefined && v > q.max) return q.onInvalid?.(tr("{field} must be at most {max}.", { field: q.label, max: q.max }));
     q.onCommit(v);
   };
   const done = (confirm = false) => {
@@ -77,7 +78,7 @@ export function NumberInput(p: NumberInputProps) {
     const v = text === null ? p.value : parseNumber(text);
     setText(null);
     if (v !== null && Number.isFinite(v)) commit(v);
-    else p.onInvalid?.(`${p.label}: “${text}” is not a number.`);
+    else p.onInvalid?.(tr("{field}: “{text}” is not a number.", { field: p.label, text: text ?? "" }));
   };
   const step = (dir: 1 | -1, mods: { shift?: boolean; alt?: boolean }) => {
     const q = latest.current;

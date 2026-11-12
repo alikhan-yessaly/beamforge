@@ -1,3 +1,4 @@
+import { msg, t } from "../i18n";
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -19,6 +20,7 @@ import {
   Lock,
   LockOpen,
   Magnet,
+  PaintBucket,
   Redo2,
   RefreshCw,
   RotateCcw,
@@ -30,13 +32,14 @@ import {
 } from "lucide-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { FitBed, FitSelection, ModeCut, ModeFill } from "../ui/customIcons";
+import { fillTool, toggleFillTool } from "./fillTool";
 import { ProjectButtons } from "./ProjectButtons";
 import { newSketch } from "./sketch/state";
 import { shortcutsOpen } from "./ShortcutSheet";
 import { NumberInput } from "../ui/NumberInput";
 import { IconButton, IconToggle } from "../ui/icons";
 import { type Anchor, type MachineProfile, type OriginCorner, fromUser, toUser, anchorPoint } from "../scene/model";
-import { type AlignMode, align, selectionBox, setSelectionBox } from "../scene/ops";
+import { type AlignMode, align, objectScale, selectionBox, setObjectScale, setSelectionBox } from "../scene/ops";
 import { canRedo, canUndo, commit, cursor, doc, messages, notify, prefs, profile, selBox, selection } from "../scene/store";
 import { actions, importFiles } from "./actions";
 import { PreviewBar } from "./LayersPanel";
@@ -63,13 +66,13 @@ function AnchorPicker() {
   const a = prefs.value.anchor;
   const vals = [0, 0.5, 1] as const;
   return (
-    <div class="ws-anchor" title="Reference point for X/Y (relative to the machine origin corner)">
+    <div class="ws-anchor" title={t("Reference point for X/Y (relative to the machine origin corner)")}>
       {vals.map((fy) =>
         vals.map((fx) => (
           <button
             key={`${fx}${fy}`}
             class={a.fx === fx && a.fy === fy ? "on" : ""}
-            aria-label={`Selection anchor ${fy === 0 ? "top" : fy === 0.5 ? "middle" : "bottom"} ${fx === 0 ? "left" : fx === 0.5 ? "center" : "right"}`}
+            aria-label={t("Selection anchor {y} {x}", { y: fy === 0 ? t("top") : fy === 0.5 ? t("middle") : t("bottom"), x: fx === 0 ? t("left") : fx === 0.5 ? t("center") : t("right") })}
             aria-pressed={a.fx === fx && a.fy === fy}
             onClick={() => (prefs.value = { ...prefs.value, anchor: { fx, fy } as Anchor })}
           />
@@ -78,6 +81,10 @@ function AnchorPicker() {
     </div>
   );
 }
+
+const round = (v: number) => Math.round(v * 100) / 100;
+
+const CORNER_NAME: Record<OriginCorner, string> = { "top-left": msg("top-left"), "top-right": msg("top-right"), "bottom-left": msg("bottom-left"), "bottom-right": msg("bottom-right") };
 
 export function PropertiesPanel() {
   const b = selBox.value;
@@ -103,6 +110,16 @@ export function PropertiesPanel() {
     place(user.x, user.y, pr.lockAspect ? w * k : w, nh);
   };
   const [rot, setRot] = useState(90);
+  // Scale of a single object relative to its drawn size (sketches keep their own dimensions; this sits on top).
+  const one = ids.size === 1 ? doc.value.objects.find((o) => ids.has(o.id)) : undefined;
+  const sc = one ? objectScale(one) : null;
+  const setScale = (axis: "x" | "y", pct: number) => {
+    if (!one || !sc) return;
+    const k = pct / 100 / (axis === "x" ? sc.sx : sc.sy);
+    const sx = axis === "x" || pr.lockAspect ? sc.sx * k : sc.sx;
+    const sy = axis === "y" || pr.lockAspect ? sc.sy * k : sc.sy;
+    commit(setObjectScale(doc.value, one.id, sx, sy, p, pr.anchor));
+  };
 
   const doAlign = (mode: AlignMode) => {
     const multi = ids.size > 1;
@@ -112,8 +129,8 @@ export function PropertiesPanel() {
 
   return (
     <section class="ws-panel">
-      <h3>Position &amp; size</h3>
-      {selectionHasHidden && <p class="ws-hint">Selected objects include hidden paths; object edits affect those paths too.</p>}
+      <h3>{t("Position & size")}</h3>
+      {selectionHasHidden && <p class="ws-hint">{t("Selected objects include hidden paths; object edits affect those paths too.")}</p>}
       <div class="ws-grid2">
         <AnchorPicker />
         <div>
@@ -123,31 +140,34 @@ export function PropertiesPanel() {
           <NumField label="H" unit="mm" value={h} min={0.001} onCommit={setH} />
         </div>
       </div>
-      <div class="ws-row">
-        <IconToggle on={pr.lockAspect} onIcon={Lock} offIcon={LockOpen} label="Lock aspect ratio" onChange={(lockAspect) => (prefs.value = { ...pr, lockAspect })} />
+      <div class="ws-scale">
+        <IconToggle on={pr.lockAspect} onIcon={Lock} offIcon={LockOpen} label={t("Lock aspect ratio")} onChange={(lockAspect) => (prefs.value = { ...pr, lockAspect })} />
+        <span title={t("Scale of the selected object relative to its drawn size")}>{t("Scale")}</span>
+        <NumField label="X" unit="%" value={sc ? round(sc.sx * 100) : null} min={0.001} onCommit={(v) => setScale("x", v)} />
+        <NumField label="Y" unit="%" value={sc ? round(sc.sy * 100) : null} min={0.001} onCommit={(v) => setScale("y", v)} />
       </div>
 
-      <h3>Rotate &amp; mirror</h3>
+      <h3>{t("Rotate & mirror")}</h3>
       <div class="ws-row">
         <input class="ws-small" type="number" value={rot} onInput={(e) => setRot(Number(e.currentTarget.value))} />°
-        <IconButton icon={RotateCcw} label="Rotate counter-clockwise" disabled={!b} onClick={() => actions.rotate(-rot)} />
-        <IconButton icon={RotateCw} label="Rotate clockwise" disabled={!b} onClick={() => actions.rotate(rot)} />
-        <IconButton icon={FlipHorizontal2} label="Mirror horizontally" disabled={!b} onClick={() => actions.mirror("h")} />
-        <IconButton icon={FlipVertical2} label="Mirror vertically" disabled={!b} onClick={() => actions.mirror("v")} />
+        <IconButton icon={RotateCcw} label={t("Rotate counter-clockwise")} disabled={!b} onClick={() => actions.rotate(-rot)} />
+        <IconButton icon={RotateCw} label={t("Rotate clockwise")} disabled={!b} onClick={() => actions.rotate(rot)} />
+        <IconButton icon={FlipHorizontal2} label={t("Mirror horizontally")} disabled={!b} onClick={() => actions.mirror("h")} />
+        <IconButton icon={FlipVertical2} label={t("Mirror vertically")} disabled={!b} onClick={() => actions.mirror("v")} />
       </div>
 
-      <h3>Align {ids.size > 1 ? "(to selection)" : "(to bed)"}</h3>
+      <h3>{ids.size > 1 ? t("Align (to selection)") : t("Align (to bed)")}</h3>
       <div class="ws-row">
-        <IconButton icon={AlignStartVertical} label="Align left" disabled={!b} onClick={() => doAlign("left")} />
-        <IconButton icon={AlignCenterVertical} label="Align horizontal centres" disabled={!b} onClick={() => doAlign("hcenter")} />
-        <IconButton icon={AlignEndVertical} label="Align right" disabled={!b} onClick={() => doAlign("right")} />
-        <IconButton icon={AlignStartHorizontal} label="Align top" disabled={!b} onClick={() => doAlign("top")} />
-        <IconButton icon={AlignCenterHorizontal} label="Align vertical centres" disabled={!b} onClick={() => doAlign("vcenter")} />
-        <IconButton icon={AlignEndHorizontal} label="Align bottom" disabled={!b} onClick={() => doAlign("bottom")} />
+        <IconButton icon={AlignStartVertical} label={t("Align left")} disabled={!b} onClick={() => doAlign("left")} />
+        <IconButton icon={AlignCenterVertical} label={t("Align horizontal centres")} disabled={!b} onClick={() => doAlign("hcenter")} />
+        <IconButton icon={AlignEndVertical} label={t("Align right")} disabled={!b} onClick={() => doAlign("right")} />
+        <IconButton icon={AlignStartHorizontal} label={t("Align top")} disabled={!b} onClick={() => doAlign("top")} />
+        <IconButton icon={AlignCenterHorizontal} label={t("Align vertical centres")} disabled={!b} onClick={() => doAlign("vcenter")} />
+        <IconButton icon={AlignEndHorizontal} label={t("Align bottom")} disabled={!b} onClick={() => doAlign("bottom")} />
         <span class="ws-sep" />
-        <IconButton icon={LocateFixed} label="Center on bed" disabled={!b} onClick={actions.centerOnBed} />
-        <IconButton icon={Group} label="Group (⌘G)" disabled={ids.size < 2} onClick={actions.group} />
-        <IconButton icon={Ungroup} label="Ungroup (⇧⌘G)" disabled={!b} onClick={actions.ungroup} />
+        <IconButton icon={LocateFixed} label={t("Center on bed")} disabled={!b} onClick={actions.centerOnBed} />
+        <IconButton icon={Group} label={t("Group (⌘G)")} disabled={ids.size < 2} onClick={actions.group} />
+        <IconButton icon={Ungroup} label={t("Ungroup (⇧⌘G)")} disabled={!b} onClick={actions.ungroup} />
       </div>
     </section>
   );
@@ -161,7 +181,7 @@ export function ObjectsPanel() {
   return (
     <details class="ws-panel ws-objects" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary>
-        <h3>Objects ({d.objects.length})</h3>
+        <h3>{t("Objects ({n})", { n: d.objects.length })}</h3>
       </summary>
       <ul class="ws-list">
         {d.objects.map((o) => (
@@ -169,7 +189,7 @@ export function ObjectsPanel() {
             <button
             type="button"
             disabled={!visibleIds.has(o.id)}
-            title={!visibleIds.has(o.id) ? "All colours in this object are shown as shadows" : undefined}
+            title={!visibleIds.has(o.id) ? t("All colours in this object are shown as shadows") : undefined}
             class={ids.has(o.id) ? "on" : ""}
             aria-pressed={ids.has(o.id)}
             onContextMenu={(e) => {
@@ -196,7 +216,7 @@ export function ObjectsPanel() {
             </button>
           </li>
         ))}
-        {d.objects.length === 0 && <li class="ws-empty">Import a DXF or drop one on the canvas</li>}
+        {d.objects.length === 0 && <li class="ws-empty">{t("Import a DXF or drop one on the canvas")}</li>}
       </ul>
     </details>
   );
@@ -212,7 +232,7 @@ export function ProfileSection(props: { advanced: boolean }) {
   const [selectedMachine, setSelectedMachine] = useState("");
   useEffect(() => {
     try { setSaved(parseMachineOrigins(localStorage.getItem(MACHINE_ORIGINS_KEY))); }
-    catch (e) { setStorageError(`Cannot load saved machine origins: ${e instanceof Error ? e.message : String(e)}`); }
+    catch (e) { setStorageError(t("Cannot load saved machine origins: {error}", { error: e instanceof Error ? e.message : String(e) })); }
   }, []);
   const bed = bedLoad.value;
   const currentProfile = profile.value;
@@ -222,86 +242,84 @@ export function ProfileSection(props: { advanced: boolean }) {
   const cardId = linkState.value === "verified" ? link.cardId : null;
   return (
     <section class="ws-panel ws-profile">
-      <h3>Machine profile</h3>
-      <label>
-        Name <input value={draft.name} onInput={(e) => setDraft({ ...draft, name: e.currentTarget.value })} />
+      <h3>{t("Machine profile")}</h3>
+      <label>{t("Name")}{" "}<input value={draft.name} onInput={(e) => setDraft({ ...draft, name: e.currentTarget.value })} />
       </label>
       <label>
-        Bed width (mm) <input type="number" min={1} disabled={cardId !== null} value={draft.bedW} onInput={(e) => setDraft({ ...draft, bedW: Number(e.currentTarget.value) })} />
+        {t("Bed width (mm)")} <input type="number" min={1} disabled={cardId !== null} value={draft.bedW} onInput={(e) => setDraft({ ...draft, bedW: Number(e.currentTarget.value) })} />
       </label>
       <label>
-        Bed height (mm) <input type="number" min={1} disabled={cardId !== null} value={draft.bedH} onInput={(e) => setDraft({ ...draft, bedH: Number(e.currentTarget.value) })} />
+        {t("Bed height (mm)")} <input type="number" min={1} disabled={cardId !== null} value={draft.bedH} onInput={(e) => setDraft({ ...draft, bedH: Number(e.currentTarget.value) })} />
       </label>
       {cardId !== null && <p class="ws-hint" role={bed.state === "error" ? "alert" : undefined}>{bed.message}
-        {bed.state === "error" && <IconButton icon={RefreshCw} label="Retry the bed read" onClick={() => void refreshBedDimensions()} />}
+        {bed.state === "error" && <IconButton icon={RefreshCw} label={t("Retry the bed read")} onClick={() => void refreshBedDimensions()} />}
       </p>}
       <label>
-        Travel speed (mm/s) <input type="number" min={1} value={draft.travelSpeed} onInput={(e) => setDraft({ ...draft, travelSpeed: Number(e.currentTarget.value) })} />
+        {t("Travel speed (mm/s)")} <input type="number" min={1} value={draft.travelSpeed} onInput={(e) => setDraft({ ...draft, travelSpeed: Number(e.currentTarget.value) })} />
       </label>
       <label>
-        Frame speed (mm/s) <input type="number" min={1} max={300} value={draft.frameSpeed ?? 30} onInput={(e) => setDraft({ ...draft, frameSpeed: Number(e.currentTarget.value) })} />
+        {t("Frame speed (mm/s)")} <input type="number" min={1} max={300} value={draft.frameSpeed ?? 30} onInput={(e) => setDraft({ ...draft, frameSpeed: Number(e.currentTarget.value) })} />
       </label>
       <label>
-        Acceleration (mm/s²) <input type="number" min={1} value={draft.accel} onInput={(e) => setDraft({ ...draft, accel: Number(e.currentTarget.value) })} />
+        {t("Acceleration (mm/s²)")} <input type="number" min={1} value={draft.accel} onInput={(e) => setDraft({ ...draft, accel: Number(e.currentTarget.value) })} />
       </label>
       <label>
-        Machine origin (home corner)
+        {t("Machine origin (home corner)")}
         <select value={draft.origin} onChange={(e) => setDraft({ ...draft, origin: e.currentTarget.value as OriginCorner })}>
           {CORNERS.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {t(CORNER_NAME[c])}
             </option>
           ))}
         </select>
       </label>
-      <p class="ws-hint">The origin corner is where the head goes when it homes. Coordinates and rulers are measured from it. Travel speed and acceleration only affect the time estimate.</p>
+      <p class="ws-hint">{t("The origin corner is where the head goes when it homes. Coordinates and rulers are measured from it. Travel speed and acceleration only affect the time estimate.")}</p>
       {props.advanced && <>
-      <h3>Saved machine origins</h3>
-      <p class="ws-hint">Card IDs identify controller types, not individual machines. Choose your machine by name and confirm its physical home corner; it is never detected automatically.</p>
+      <h3>{t("Saved machine origins")}</h3>
+      <p class="ws-hint">{t("Card IDs identify controller types, not individual machines. Choose your machine by name and confirm its physical home corner; it is never detected automatically.")}</p>
       {storageError && <p class="warn" role="alert">{storageError}</p>}
-      <label>Saved machine
-        <select value={selectedMachine} onChange={(e) => setSelectedMachine(e.currentTarget.value)}>
-          <option value="">Select a saved machine</option>
-          {saved.map((m) => <option value={m.name} key={m.name}>{m.name} · {m.origin} · card 0x{m.cardId.toString(16)}</option>)}
+      <label>{t("Saved machine")}<select value={selectedMachine} onChange={(e) => setSelectedMachine(e.currentTarget.value)}>
+          <option value="">{t("Select a saved machine")}</option>
+          {saved.map((m) => <option value={m.name} key={m.name}>{m.name} · {t(CORNER_NAME[m.origin])} · card 0x{m.cardId.toString(16)}</option>)}
         </select>
       </label>
       <div class="ws-row">
-        <IconButton icon={BookmarkCheck} label="Use the saved origin" disabled={!selectedMachine} onClick={() => {
+        <IconButton icon={BookmarkCheck} label={t("Use the saved origin")} disabled={!selectedMachine} onClick={() => {
           const entry = saved.find((m) => m.name === selectedMachine);
           if (!entry) return;
           if (cardId !== null && cardId !== entry.cardId) {
-            notify("The saved machine's card ID does not match the connected controller.", "error");
+            notify(t("The saved machine's card ID does not match the connected controller."), "error");
             return;
           }
           setDraft({ ...draft, name: entry.name, origin: entry.origin });
         }} />
-        <IconButton icon={BookmarkPlus} label="Remember this origin for the machine" disabled={cardId === null || !!storageError || !draft.name.trim()} onClick={() => {
+        <IconButton icon={BookmarkPlus} label={t("Remember this origin for the machine")} disabled={cardId === null || !!storageError || !draft.name.trim()} onClick={() => {
           if (cardId === null) return;
           const name = draft.name.trim();
           const existing = saved.find((m) => m.name === name);
-          if (existing && !window.confirm(`Replace saved origin for "${name}"?`)) return;
+          if (existing && !window.confirm(t("Replace saved origin for \"{name}\"?", { name }))) return;
           const next = [...saved.filter((m) => m.name !== name), { name, cardId, origin: draft.origin }];
           try {
             localStorage.setItem(MACHINE_ORIGINS_KEY, JSON.stringify(next));
             setSaved(next);
             setSelectedMachine(name);
-            notify(`Saved origin for ${name}.`);
-          } catch (e) { setStorageError(`Cannot save machine origin: ${e instanceof Error ? e.message : String(e)}`); }
+            notify(t("Saved origin for {name}.", { name }));
+          } catch (e) { setStorageError(t("Cannot save machine origin: {error}", { error: e instanceof Error ? e.message : String(e) })); }
         }} />
       </div>
       </>}
       <div class="ws-row">
         <IconButton
           icon={Check}
-          label="Save the profile"
+          label={t("Save the profile")}
           onClick={() => {
             if (draft.bedW > 0 && draft.bedH > 0 && draft.travelSpeed > 0 && draft.accel > 0 && (draft.frameSpeed ?? 30) > 0 && (draft.frameSpeed ?? 30) <= 300) {
               profile.value = cardId !== null ? { ...draft, bedW: profile.value.bedW, bedH: profile.value.bedH } : draft;
-              notify("Machine profile saved.");
-            } else notify("Machine profile values must be positive (frame speed at most 300 mm/s).", "error");
+              notify(t("Machine profile saved."));
+            } else notify(t("Machine profile values must be positive (frame speed at most 300 mm/s)."), "error");
           }}
         />
-        <IconButton icon={Undo2} label="Discard changes" onClick={() => setDraft(profile.value)} />
+        <IconButton icon={Undo2} label={t("Discard changes")} onClick={() => setDraft(profile.value)} />
       </div>
     </section>
   );
@@ -314,8 +332,8 @@ export function Toolbar() {
   return (
     <div class="ws-toolbar">
       <ProjectButtons />
-      <IconButton icon={FileUp} label="Import DXF…" onClick={() => fileRef.current?.click()} />
-      <IconButton icon={PenTool} label="New sketch: draw lines, arcs, circles with dimensions and constraints" onClick={() => void newSketch()} />
+      <IconButton icon={FileUp} label={t("Import DXF…")} onClick={() => fileRef.current?.click()} />
+      <IconButton icon={PenTool} label={t("New sketch: draw lines, arcs, circles with dimensions and constraints")} onClick={() => void newSketch()} />
       <input
         ref={fileRef}
         type="file"
@@ -329,19 +347,20 @@ export function Toolbar() {
         }}
       />
       <span class="ws-sep" />
-      <IconButton icon={Undo2} label="Undo (⌘Z)" disabled={!canUndo.value} onClick={actions.undo} />
-      <IconButton icon={Redo2} label="Redo (⇧⌘Z)" disabled={!canRedo.value} onClick={actions.redo} />
-      <IconButton icon={CopyPlus} label="Duplicate (⌘D)" disabled={!has} onClick={actions.duplicate} />
-      <IconButton icon={Trash2} label="Delete (⌫)" disabled={!has} onClick={actions.delete} />
+      <IconButton icon={Undo2} label={t("Undo (⌘Z)")} disabled={!canUndo.value} onClick={actions.undo} />
+      <IconButton icon={Redo2} label={t("Redo (⇧⌘Z)")} disabled={!canRedo.value} onClick={actions.redo} />
+      <IconButton icon={CopyPlus} label={t("Duplicate (⌘D)")} disabled={!has} onClick={actions.duplicate} />
+      <IconButton icon={Trash2} label={t("Delete (⌫)")} disabled={!has} onClick={actions.delete} />
       <span class="ws-sep" />
-      <IconButton icon={ModeCut} label="Cut: move the selection to a cut layer" disabled={!has} onClick={() => actions.setMode("cut")} />
-      <IconButton icon={ModeFill} label="Fill: move the selection's closed shapes to a fill (engrave) layer" disabled={!has} onClick={() => actions.setMode("fill")} />
+      <IconButton icon={ModeCut} label={t("Cut: move the selection to a cut layer")} disabled={!has} onClick={() => actions.setMode("cut")} />
+      <IconButton icon={ModeFill} label={t("Fill: move the selection's closed shapes to a fill (engrave) layer")} disabled={!has} onClick={() => actions.setMode("fill")} />
+      <IconToggle on={!!fillTool.value} onIcon={PaintBucket} label={t("Fill tool (I): click inside shapes to engrave them in the colour picked below; click again to clear")} onChange={toggleFillTool} />
       <span class="ws-sep" />
-      <IconButton icon={FitBed} label="Zoom to bed (B)" onClick={actions.zoomBed} />
-      <IconButton icon={FitSelection} label="Zoom to selection (F)" disabled={!has} onClick={actions.zoomSelection} />
+      <IconButton icon={FitBed} label={t("Zoom to bed (B)")} onClick={actions.zoomBed} />
+      <IconButton icon={FitSelection} label={t("Zoom to selection (F)")} disabled={!has} onClick={actions.zoomSelection} />
       <span class="ws-sep" />
-      <IconToggle on={pr.snapToGrid} onIcon={Magnet} label="Snap to grid (hold Alt while dragging to invert)" onChange={(snapToGrid) => (prefs.value = { ...pr, snapToGrid })} />
-      <select value={pr.gridStep} onChange={(e) => (prefs.value = { ...pr, gridStep: Number(e.currentTarget.value) })} title="Snap step">
+      <IconToggle on={pr.snapToGrid} onIcon={Magnet} label={t("Snap to grid (hold Alt while dragging to invert)")} onChange={(snapToGrid) => (prefs.value = { ...pr, snapToGrid })} />
+      <select value={pr.gridStep} onChange={(e) => (prefs.value = { ...pr, gridStep: Number(e.currentTarget.value) })} title={t("Snap step")}>
         {[0.5, 1, 5, 10, 50].map((s) => (
           <option key={s} value={s}>
             {s} mm
@@ -364,7 +383,7 @@ export function StatusBar() {
       </span>
       <span class="ws-grow" />
       <PreviewBar />
-      <IconButton icon={Keyboard} label="Keyboard shortcuts (?)" onClick={() => (shortcutsOpen.value = true)} />
+      <IconButton icon={Keyboard} label={t("Keyboard shortcuts (?)")} onClick={() => (shortcutsOpen.value = true)} />
     </div>
   );
 }

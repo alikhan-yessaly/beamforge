@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Crosshair, type LucideIcon, Navigation, OctagonX, Pause, Play, RefreshCw, Square } from "lucide-preact";
+import { lang, msg, t } from "../i18n";
 import { iconify } from "./icons";
 import { type Signal, effect } from "@preact/signals";
 import type { JobRunner } from "../controller/jobRunner";
@@ -72,7 +73,7 @@ export function mountMachinePanel(
   const stopBtn = iconify(
     el("button", { cls: "mp-stop" }),
     OctagonX,
-    "Software STOP (Esc). Not an emergency stop: stops jobs and jogs, cancels queued move segments, sends D8 01. Cannot halt a frame or a move segment already running.",
+    msg("Software STOP (Esc). Not an emergency stop: stops jobs and jogs, cancels queued move segments, sends D8 01. Cannot halt a frame or a move segment already running."),
     22,
   );
   const stopState = el("span", { cls: "mp-state small" });
@@ -89,8 +90,8 @@ export function mountMachinePanel(
     const results = await Promise.allSettled(operations);
     const errors = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
     stopState.textContent = errors.length
-      ? `STOP failed: ${errors.map((e) => errText(e.reason)).join("; ")}`
-      : `STOP sent ${new Date().toLocaleTimeString()}`;
+      ? t("STOP failed: {error}", { error: errors.map((e) => errText(e.reason)).join("; ") })
+      : t("STOP sent {time}", { time: new Date().toLocaleTimeString() });
   };
   stopBtn.onclick = () => void doStop();
   const onKey = (ev: KeyboardEvent) => {
@@ -107,15 +108,15 @@ export function mountMachinePanel(
   const addrX = el("input", { value: addrToHex(ADDR_POSITION_X), cls: "mp-addr" });
   const addrY = el("input", { value: addrToHex(ADDR_POSITION_Y), cls: "mp-addr" });
   const interval = num(500, 100, 10000, 100);
-  const pollBtn = iconify(el("button"), Play, "Start polling");
-  const readOnceBtn = iconify(el("button"), RefreshCw, "Read once");
+  const pollBtn = iconify(el("button"), Play, msg("Start polling"));
+  const readOnceBtn = iconify(el("button"), RefreshCw, msg("Read once"));
   const pollInfo = el("span", { cls: "small" });
-  const liveInfo = el("p", { cls: "small", textContent: "Status and position not yet read." });
+  const liveInfo = el("p", { cls: "small", textContent: msg("Status and position not yet read.") });
   const tbody = el("tbody");
   const table = el(
     "table",
     { cls: "mp-table" },
-    el("thead", {}, el("tr", {}, ...["Item", "Addr", "Raw 5 bytes", "Value", "Hex", "÷1000 (mm if µm)"].map((h) => el("th", {}, h)))),
+    el("thead", {}, el("tr", {}, ...[msg("Item"), msg("Addr"), msg("Raw 5 bytes"), msg("Value"), "Hex", "÷1000 (mm if µm)"].map((h) => el("th", {}, h)))),
     tbody,
   );
   let lastPosUm: { x: number; y: number } | null = null;
@@ -133,15 +134,15 @@ export function mountMachinePanel(
   const renderRow = (name: string, addr: number, r: MemoryReply | undefined, extra = "") => {
     const cells = r
       ? [name, addrToHex(addr), toHex(r.data), String(r.value), "0x" + (r.value >>> 0).toString(16), (r.value / 1000).toFixed(3) + extra]
-      : [name, addrToHex(addr), "no reply", "", "", ""];
+      : [name, addrToHex(addr), t("no reply"), "", "", ""];
     return el("tr", {}, ...cells.map((c) => el("td", {}, c)));
   };
 
   async function readOnce(): Promise<void> {
     const items: [string, number][] = [
-      ["Status", parseAddr(addrStatus)],
-      ["X position", parseAddr(addrX)],
-      ["Y position", parseAddr(addrY)],
+      [msg("Status"), parseAddr(addrStatus)],
+      [msg("X position"), parseAddr(addrX)],
+      [msg("Y position"), parseAddr(addrY)],
     ];
     const results: (MemoryReply | undefined)[] = [];
     for (const [, addr] of items) {
@@ -155,22 +156,22 @@ export function mountMachinePanel(
     lastPosUm = x && y ? { x: x.value, y: y.value } : null;
     const standard = items[0]![1] === ADDR_MACHINE_STATUS && items[1]![1] === ADDR_POSITION_X && items[2]![1] === ADDR_POSITION_Y;
     liveInfo.textContent = standard
-      ? `Status ${st ? "0x" + st.value.toString(16) : "no reply"} · X ${x ? (x.value / 1000).toFixed(2) + " mm" : "no reply"} · Y ${y ? (y.value / 1000).toFixed(2) + " mm" : "no reply"}`
-      : "Custom diagnostic addresses selected; see diagnostics for readings.";
-    const stBits = st ? `  bits ${(st.value >>> 0).toString(2).padStart(8, "0")}${st.value & 0x10 ? " (0x10 set: moving?)" : ""}` : "";
+      ? `${t("Status")} ${st ? "0x" + st.value.toString(16) : t("no reply")} · X ${x ? (x.value / 1000).toFixed(2) + " mm" : t("no reply")} · Y ${y ? (y.value / 1000).toFixed(2) + " mm" : t("no reply")}`
+      : t("Custom diagnostic addresses selected; see diagnostics for readings.");
+    const stBits = st ? `  bits ${(st.value >>> 0).toString(2).padStart(8, "0")}${st.value & 0x10 ? t(" (0x10 set: moving?)") : ""}` : "";
     tbody.replaceChildren(
       renderRow(items[0]![0], items[0]![1], st),
       el("tr", {}, el("td", { colSpan: 6 }, stBits || "—")),
       renderRow(items[1]![0], items[1]![1], x),
       renderRow(items[2]![0], items[2]![1], y),
     );
-    pollInfo.textContent = `${pollCount} reads, ${missCount} with a missing reply, last ${new Date().toLocaleTimeString()}`;
+    pollInfo.textContent = t("{reads} reads, {missed} with a missing reply, last {time}", { reads: pollCount, missed: missCount, time: new Date().toLocaleTimeString() });
   }
 
   const stopPolling = () => {
     polling = false;
     clearTimeout(pollTimer);
-    iconify(pollBtn, Play, "Start polling");
+    iconify(pollBtn, Play, msg("Start polling"));
   };
   const pollLoop = async () => {
     if (!polling) return;
@@ -178,7 +179,7 @@ export function mountMachinePanel(
       try {
         await readOnce();
       } catch (e) {
-        pollInfo.textContent = `Poll error: ${errText(e)}`;
+        pollInfo.textContent = t("Poll error: {error}", { error: errText(e) });
         liveInfo.textContent = pollInfo.textContent;
         stopPolling();
         return;
@@ -189,25 +190,25 @@ export function mountMachinePanel(
   pollBtn.onclick = () => {
     if (polling) return stopPolling();
     polling = true;
-    iconify(pollBtn, Pause, "Stop polling");
+    iconify(pollBtn, Pause, msg("Stop polling"));
     void pollLoop();
   };
-  readOnceBtn.onclick = () => readOnce().catch((e) => { pollInfo.textContent = `Error: ${errText(e)}`; liveInfo.textContent = pollInfo.textContent; });
+  readOnceBtn.onclick = () => readOnce().catch((e) => { pollInfo.textContent = t("Error: {error}", { error: errText(e) }); liveInfo.textContent = pollInfo.textContent; });
   cleanups.push(stopPolling);
 
   const pollSection = el(
     "section",
     {},
-    el("h2", {}, "Machine status"),
+    el("h2", {}, msg("Machine status")),
     el(
       "p",
       { cls: "small" },
-      "Reads ",
+      msg("Reads "),
       el("code", {}, "DA 00 <addr>"),
-      " for each address. Addresses are the two wire bytes after DA 00. ",
-      "X/Y position (04 21 / 04 31, in µm from home) are verified on hardware.",
+      msg(" for each address. Addresses are the two wire bytes after DA 00. "),
+      msg("X/Y position (04 21 / 04 31, in µm from home) are verified on hardware."),
     ),
-    row(label("Status", addrStatus), label("X", addrX), label("Y", addrY), label("Interval ms", interval)),
+    row(label(msg("Status"), addrStatus), label("X", addrX), label("Y", addrY), label(msg("Interval ms"), interval)),
     row(pollInfo),
     table,
   );
@@ -220,14 +221,17 @@ export function mountMachinePanel(
   [0.1, 1, 5, 10, 50].forEach((st) => stepSel.add(new Option(`${st} mm`, String(st), st === 1, st === 1)));
   const jogInfo = el("pre", { cls: "result" });
   const showErr = (e: unknown) => {
-    if (!(e instanceof StoppedError)) jogInfo.textContent = `Error: ${errText(e)}`;
+    if (!(e instanceof StoppedError)) jogInfo.textContent = t("Error: {error}", { error: errText(e) });
   };
   const speedVal = () => Number(speed.value);
   // Arrow keys as the controller keypad defines them. Measured on an origin-top-right machine:
   // left = +X, right = -X, up = -Y, down = +Y (machine coordinates).
   const STEP_DIR: Record<JogKey, [number, number]> = { 0: [1, 0], 1: [-1, 0], 2: [0, -1], 3: [0, 1] };
+  // Directions: shown in jog messages (t(text)) and as button labels (translated in place by localizeDom).
+  const JOG_LABEL: Record<string, string> = { left: msg("Jog left"), right: msg("Jog right"), up: msg("Jog up"), down: msg("Jog down") };
+  void [msg("left"), msg("right"), msg("up"), msg("down")];
   const jogBtn = (text: string, key: JogKey, icon: LucideIcon) => {
-    const b = iconify(el("button"), icon, `Jog ${text}`);
+    const b = iconify(el("button"), icon, JOG_LABEL[text] ?? text);
     let held = false;
     const release = () => {
       if (!held) return;
@@ -242,7 +246,7 @@ export function mountMachinePanel(
         /* synthetic events have no active pointer; pointerup/leave still release */
       }
       held = true;
-      jogInfo.textContent = `Jogging ${text} at ${speedVal()} mm/s (release to stop)`;
+      jogInfo.textContent = t("Jogging {dir} at {speed} mm/s (release to stop)", { dir: t(text), speed: speedVal() });
       motion.jogPress(key, speedVal()).catch((e) => {
         held = false;
         showErr(e);
@@ -258,10 +262,10 @@ export function mountMachinePanel(
         const step = Number(stepSel.value) * 1000;
         const [dx, dy] = STEP_DIR[key];
         const p = await motion.position();
-        jogInfo.textContent = `Step ${text} ${stepSel.value} mm`;
+        jogInfo.textContent = t("Step {dir} {step} mm", { dir: t(text), step: stepSel.value });
         await motion.moveTo({ x: p.x + dx * step, y: p.y + dy * step }, speedVal());
         const q = await motion.position();
-        jogInfo.textContent = `At X ${(q.x / 1000).toFixed(3)}  Y ${(q.y / 1000).toFixed(3)} mm`;
+        jogInfo.textContent = t("At X {x}  Y {y} mm", { x: (q.x / 1000).toFixed(3), y: (q.y / 1000).toFixed(3) });
       } catch (e) {
         showErr(e);
       }
@@ -281,17 +285,17 @@ export function mountMachinePanel(
   );
   const goX = num(0, 0, 10000, 0.1);
   const goY = num(0, 0, 10000, 0.1);
-  const goBtn = iconify(el("button"), Navigation, "Go to this position");
-  const hereBtn = iconify(el("button"), Crosshair, "Use the current head position");
+  const goBtn = iconify(el("button"), Navigation, msg("Go to this position"));
+  const hereBtn = iconify(el("button"), Crosshair, msg("Use the current head position"));
   goBtn.onclick = async () => {
     try {
-      jogInfo.textContent = `Moving to ${goX.value}, ${goY.value} mm…`;
+      jogInfo.textContent = t("Moving to {x}, {y} mm…", { x: goX.value, y: goY.value });
       await motion.moveTo({ x: Number(goX.value) * 1000, y: Number(goY.value) * 1000 }, speedVal(), (p) => {
-        jogInfo.textContent = `Moving… X ${(p.x / 1000).toFixed(1)}  Y ${(p.y / 1000).toFixed(1)} mm`;
+        jogInfo.textContent = t("Moving… X {x}  Y {y} mm", { x: (p.x / 1000).toFixed(1), y: (p.y / 1000).toFixed(1) });
       });
-      jogInfo.textContent = `Arrived at ${goX.value}, ${goY.value} mm`;
+      jogInfo.textContent = t("Arrived at {x}, {y} mm", { x: goX.value, y: goY.value });
     } catch (e) {
-      if (e instanceof StoppedError) jogInfo.textContent = "Stopped.";
+      if (e instanceof StoppedError) jogInfo.textContent = t("Stopped.");
       else showErr(e);
     }
   };
@@ -307,41 +311,41 @@ export function mountMachinePanel(
   const jogControls = el(
     "fieldset",
     { cls: "mp-gate" },
-    row(label("Speed mm/s", speed), label("Hold to jog", continuous), label("Step", stepSel)),
+    row(label(msg("Speed mm/s"), speed), label(msg("Hold to jog"), continuous), label(msg("Step"), stepSel)),
     jogGrid,
-    row(el("strong", {}, "Go to (machine mm)"), label("X", goX), label("Y", goY), goBtn, hereBtn),
+    row(el("strong", {}, msg("Go to (machine mm)")), label("X", goX), label("Y", goY), goBtn, hereBtn),
     jogInfo,
   );
   const jogSection = el(
     "section",
     {},
-    el("h2", {}, "Jog"),
+    el("h2", {}, msg("Jog")),
     el(
       "p",
       { cls: "small" },
-      "Hold an arrow to move; release to stop. Go to moves in short steps, so STOP (or Esc) halts it.",
+      msg("Hold an arrow to move; release to stop. Go to moves in short steps, so STOP (or Esc) halts it."),
     ),
-    row(label("I'm at the machine, the lid is closed and the path is clear", atMachine)),
+    row(label(msg("I'm at the machine, the lid is closed and the path is clear"), atMachine)),
     jogControls,
   );
 
   // ---------- Stress test ----------
   const payloadSel = el("select");
-  payloadSel.add(new Option("Status query DA 00 04 00 (read-only)", "status"));
-  payloadSel.add(new Option("Custom hex (repeated)", "custom"));
+  payloadSel.add(new Option(msg("Status query DA 00 04 00 (read-only)"), "status"));
+  payloadSel.add(new Option(msg("Custom hex (repeated)"), "custom"));
   const customHex = el("input", { placeholder: "unswizzled hex, e.g. DA 00 05 7E", size: 34 });
   const repeat = num(200, 1, 100000);
   const chunkSize = num(1024, 1, 65536);
   const delay = num(0, 0, 10000);
   const settle = num(1000, 0, 10000, 100);
-  const runBtn = iconify(el("button"), Play, "Run stress test");
-  const abortBtn = iconify(el("button", { disabled: true }), Square, "Abort the stress test");
+  const runBtn = iconify(el("button"), Play, msg("Run stress test"));
+  const abortBtn = iconify(el("button", { disabled: true }), Square, msg("Abort the stress test"));
   const stressInfo = el("pre", { cls: "result" });
   runBtn.onclick = async () => {
     let payload: Uint8Array;
     try {
       payload = payloadSel.value === "status" ? queryStatus() : parseHex(customHex.value);
-      if ((payload[0]! & 0x80) === 0) throw new Error("Payload must start with a command byte (>= 0x80)");
+      if ((payload[0]! & 0x80) === 0) throw new Error(t("Payload must start with a command byte (>= 0x80)"));
     } catch (e) {
       stressInfo.textContent = errText(e);
       return;
@@ -349,7 +353,7 @@ export function mountMachinePanel(
     stressAbort = new AbortController();
     runBtn.disabled = true;
     abortBtn.disabled = false;
-    stressInfo.textContent = "Running…";
+    stressInfo.textContent = t("Running…");
     try {
       const r = await runStressTest(link, {
         payload,
@@ -358,11 +362,11 @@ export function mountMachinePanel(
         delayMs: Number(delay.value),
         settleMs: Number(settle.value),
         signal: stressAbort.signal,
-        onProgress: (n, total) => (stressInfo.textContent = `Running… ${n}/${total} chunks`),
+        onProgress: (n, total) => (stressInfo.textContent = t("Running… {n}/{total} chunks", { n, total })),
       });
       stressInfo.textContent = formatStress(r).replace(/; /g, "\n");
     } catch (e) {
-      stressInfo.textContent = `Not run: ${errText(e)}`;
+      stressInfo.textContent = t("Not run: {error}", { error: errText(e) });
     } finally {
       stressAbort = null;
       abortBtn.disabled = true;
@@ -373,42 +377,48 @@ export function mountMachinePanel(
   const stressControls = el(
     "fieldset",
     { cls: "mp-gate" },
-    row(label("Payload", payloadSel), customHex),
-    row(label("Repeat", repeat), label("Chunk bytes", chunkSize), label("Delay ms", delay), label("Count replies for ms", settle)),
+    row(label(msg("Payload"), payloadSel), customHex),
+    row(label(msg("Repeat"), repeat), label(msg("Chunk bytes"), chunkSize), label(msg("Delay ms"), delay), label(msg("Count replies for ms"), settle)),
     row(runBtn, abortBtn),
   );
   const stressSection = el(
     "section",
     {},
-    el("h2", {}, "Send stress test"),
+    el("h2", {}, msg("Send stress test")),
     el(
       "p",
       { cls: "small" },
-      "Sends the payload Repeat times in chunks (cut at command boundaries) and times every write. A write over 50 ms counts as blocked. With the status query, every query should get one reply: fewer replies than queries means the controller dropped data. Polling pauses during the test. Custom payloads go through the same safety checks as everything else (no memory writes).",
+      msg("Sends the payload Repeat times in chunks (cut at command boundaries) and times every write. A write over 50 ms counts as blocked. With the status query, every query should get one reply: fewer replies than queries means the controller dropped data. Polling pauses during the test. Custom payloads go through the same safety checks as everything else (no memory writes)."),
     ),
     stressControls,
     stressInfo,
   );
 
-  const statusSection = el("section", { cls: "dev-only" }, el("h2", {}, "Status and position"), row(readOnceBtn, pollBtn), liveInfo);
+  const statusSection = el("section", { cls: "dev-only" }, el("h2", {}, msg("Status and position")), row(readOnceBtn, pollBtn), liveInfo);
   const root = el("div", { id: "machine-panel" }, statusSection, jogSection);
   container.append(root);
   const diagnostics = document.getElementById("diagnostics-machine");
-  if (!diagnostics) throw new Error("Missing diagnostics container");
+  if (!diagnostics) throw new Error(t("Missing diagnostics container"));
   diagnostics.append(pollSection, stressSection);
   cleanups.push(() => { pollSection.remove(); stressSection.remove(); });
   cleanups.push(() => root.remove());
 
   // ---------- Gating ----------
   const gated: HTMLElement[] = [readOnceBtn, pollBtn];
+  const stateText = (s: LinkState) => (s === "verified" ? t("Link verified") : s === "connected" ? t("Read the Card ID to enable") : t("Disconnected"));
+  // The language can change at any time: keep the stop bar's state line in it.
+  cleanups.push(effect(() => {
+    void lang.value;
+    stopState.textContent = stateText(link.state);
+  }));
   function update(s: LinkState) {
     const ok = s === "verified";
     stopBtn.disabled = !ok;
-    stopState.textContent = ok ? "Link verified" : s === "connected" ? "Read the Card ID to enable" : "Disconnected";
+    stopState.textContent = stateText(s);
     gated.forEach((b) => ((b as HTMLButtonElement).disabled = !ok));
     if (!ok) {
       stopPolling();
-      liveInfo.textContent = "Status and position not yet read.";
+      liveInfo.textContent = t("Status and position not yet read.");
       stressAbort?.abort();
       atMachine.checked = false;
       lastPosUm = null;

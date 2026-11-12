@@ -1,7 +1,7 @@
 import { computed, effect, signal } from "@preact/signals";
 import { selectionBox } from "./ops";
 import { type Anchor, DEFAULT_PROFILE, type Doc, type MachineProfile } from "./model";
-import { visibleDocument } from "../job/layers";
+import { migrateDoc, visibleDocument } from "../job/layers";
 
 const DOC_KEY = "ruida-web.doc.v1";
 const PROFILE_KEY = "ruida-web.profile.v1";
@@ -35,7 +35,7 @@ export interface Prefs {
   startFrom: "absolute" | "current";
 }
 
-export const doc = signal<Doc>(load<Doc>(DOC_KEY, { objects: [], layers: [] }));
+export const doc = signal<Doc>(migrateDoc(load<Doc>(DOC_KEY, { objects: [], layers: [] })));
 export const profile = signal<MachineProfile>(load(PROFILE_KEY, DEFAULT_PROFILE));
 export const prefs = signal<Prefs>(load(PREFS_KEY, { snapToGrid: false, gridStep: 10, anchor: { fx: 0, fy: 0 }, lockAspect: true, innerFirst: true, startFrom: "absolute" }));
 export const selection = signal<ReadonlySet<string>>(new Set());

@@ -1,3 +1,4 @@
+import { t, tp } from "../i18n";
 import { translate } from "../geom/geom";
 import { signal } from "@preact/signals";
 import type { SceneObject } from "../scene/model";
@@ -24,11 +25,12 @@ import { openProject, saveProject, saveProjectAs } from "../project/state";
 import { fitBed, fitBox, view } from "./view";
 import { assignMode, visibleDocument } from "../job/layers";
 import type { LayerMode } from "../scene/model";
+import { fillTool, stopFillTool, toggleFillTool } from "./fillTool";
 
 export async function importFiles(files: Iterable<File>): Promise<void> {
   for (const f of files) {
     if (!/\.dxf$/i.test(f.name)) {
-      notify(`${f.name}: only .dxf is supported for now`, "warn");
+      notify(t("{file}: only .dxf is supported for now", { file: f.name }), "warn");
       continue;
     }
     try {
@@ -55,12 +57,12 @@ export const actions = {
   setMode: (mode: LayerMode) => {
     const r = assignMode(doc.value, sel(), mode);
     if (!r) {
-      notify(mode === "cut" ? "The selection is already on a cut layer." : "Nothing to fill: select closed shapes that aren't already on a fill layer.");
+      notify(mode === "cut" ? t("The selection is already on a cut layer.") : t("Nothing to fill: select closed shapes that aren't already on a fill layer."));
       return;
     }
     commit(r.doc);
-    const what = mode === "cut" ? "cut" : mode === "fill" ? "fill" : "fill + outline";
-    notify(r.created ? `Moved to a new ${what} layer (${r.color}); set its speed and power in Layers.` : `Moved to the ${what} layer ${r.color}.`);
+    const created = mode === "cut" ? t("Moved to a new cut layer ({color}); set its speed and power in Layers.", { color: r.color }) : t("Moved to a new fill layer ({color}); set its speed and power in Layers.", { color: r.color });
+    notify(r.created ? created : mode === "cut" ? t("Moved to the cut layer {color}.", { color: r.color }) : t("Moved to the fill layer {color}.", { color: r.color }));
   },
   delete: () => commit(removeSelected(doc.value, sel())),
   copy: () => {
@@ -68,7 +70,7 @@ export const actions = {
     if (!objects.length) return;
     clipboard.value = objects;
     pasteCount = 0;
-    notify(`Copied ${objects.length} object${objects.length === 1 ? "" : "s"} within this workspace.`);
+    notify(tp(["Copied {n} object within this workspace.", "Copied {n} objects within this workspace."], objects.length));
   },
   cut: () => {
     if (!sel().size) return;
@@ -146,7 +148,10 @@ export function handleKey(e: KeyboardEvent): void {
   else if (mod && k === "g" && e.shiftKey) actions.ungroup();
   else if (mod && k === "g") actions.group();
   else if (k === "delete" || k === "backspace") actions.delete();
-  else if (k === "escape") actions.deselect();
+  else if (k === "escape") {
+    if (fillTool.value) stopFillTool();
+    else actions.deselect();
+  } else if (!mod && k === "i") toggleFillTool();
   else if (k === "arrowleft") actions.nudge(-step, 0);
   else if (k === "arrowright") actions.nudge(step, 0);
   else if (k === "arrowup") actions.nudge(0, -step);

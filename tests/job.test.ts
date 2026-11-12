@@ -111,6 +111,41 @@ describe("planToolpath", () => {
     const tp = planToolpath(d, { start: O, innerFirst: true });
     expect(tp.segments.filter((s) => s.cut)).toHaveLength(12);
   });
+
+  const travelLength = (tp: ReturnType<typeof planToolpath>) => tp.segments.filter((s) => !s.cut).reduce((n, s) => n + Math.hypot(s.x1 - s.x0, s.y1 - s.y0), 0);
+
+  it("gives each shape all its passes before the next, innermost first", () => {
+    const d = updateLayer(docOf([rect(0, 0, 100, 100), rect(40, 40, 20, 20)]), "#000000", { passes: 2 });
+    const cuts = planToolpath(d, { start: O, innerFirst: true }).segments.filter((s) => s.cut);
+    expect(cuts).toHaveLength(16);
+    // The first 8 cuts (two passes) are all on the hole, the last 8 on the outline.
+    expect(cuts.slice(0, 8).every((s) => s.x0 >= 40 && s.x0 <= 60)).toBe(true);
+    expect(cuts.slice(8).every((s) => s.x0 === 0 || s.x0 === 100 || s.y0 === 0 || s.y0 === 100)).toBe(true);
+  });
+
+  it("cuts an open path back and forth on alternate passes", () => {
+    const d = updateLayer(docOf([line({ x: 10, y: 0 }, { x: 20, y: 0 })]), "#000000", { passes: 2 });
+    const segs = planToolpath(d, { start: O, innerFirst: true }).segments;
+    const cuts = segs.filter((s) => s.cut);
+    expect(cuts.map((s) => [s.x0, s.x1])).toEqual([[10, 20], [20, 10]]);
+    expect(segs.filter((s) => !s.cut)).toHaveLength(2); // there and home
+  });
+
+  it("joins separate lines that meet end to end into one cut", () => {
+    const sq = [line({ x: 10, y: 10 }, { x: 20, y: 10 }), line({ x: 20, y: 20 }, { x: 20, y: 10 }), line({ x: 20, y: 20 }, { x: 10, y: 20 }), line({ x: 10, y: 10 }, { x: 10, y: 20 })];
+    const segs = planToolpath(docOf(sq), { start: O, innerFirst: true }).segments;
+    expect(segs.filter((s) => s.cut)).toHaveLength(4);
+    expect(segs.filter((s) => !s.cut)).toHaveLength(2); // one start, one return: no travel between the sides
+  });
+
+  it("2-opt fixes a nearest-neighbour zig-zag", () => {
+    // Tiny marks at x = 1, -2, 4, -8 (start at 0): nearest-neighbour zig-zags 1+3+6+12 and back 8 = 30 mm;
+    // going 1, 4, then -2, -8 is about 24 mm.
+    const S = { x: 10, y: 10 };
+    const paths = [1, -2, 4, -8].map((x) => line({ x: S.x + x, y: S.y }, { x: S.x + x, y: S.y + 0.01 }));
+    const tp = planToolpath(docOf(paths), { start: S, innerFirst: true });
+    expect(travelLength(tp)).toBeLessThan(26);
+  });
 });
 
 describe("estimate", () => {

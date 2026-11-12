@@ -1,6 +1,8 @@
 // `.laserproj` project files: the drawing, layers and job options in machine-neutral units (mm, mm/s, %), plus a
 // separate, informational `machine` entry, so a future driver for another laser can open the same file.
+import { t } from "../i18n";
 import type { Doc, Layer, SceneObject, ScenePath } from "../scene/model";
+import { migrateDoc } from "../job/layers";
 
 export const PROJECT_EXT = ".laserproj";
 export const PROJECT_FORMAT = "laserproj";
@@ -42,19 +44,20 @@ const isStr = (v: unknown): v is string => typeof v === "string";
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 function checkPath(p: unknown, where: string): ScenePath {
-  if (!isObj(p) || !isStr(p.color) || typeof p.closed !== "boolean" || !Array.isArray(p.points)) throw new ProjectError(`Invalid path in ${where}`);
-  for (const q of p.points) if (!isObj(q) || !isNum(q.x) || !isNum(q.y)) throw new ProjectError(`Invalid point in ${where}`);
+  if (!isObj(p) || !isStr(p.color) || typeof p.closed !== "boolean" || !Array.isArray(p.points)) throw new ProjectError(t("Invalid path in {where}", { where }));
+  for (const q of p.points) if (!isObj(q) || !isNum(q.x) || !isNum(q.y)) throw new ProjectError(t("Invalid point in {where}", { where }));
+  if (p.fill !== undefined && !isStr(p.fill)) throw new ProjectError(t("Invalid fill colour in {where}", { where }));
   return p as unknown as ScenePath;
 }
 
 function checkObject(o: unknown, depth = 0): SceneObject {
-  if (depth > 50) throw new ProjectError("Groups are nested too deeply");
+  if (depth > 50) throw new ProjectError(t("Groups are nested too deeply"));
   if (!isObj(o) || !isStr(o.id) || !isStr(o.name) || !Array.isArray(o.paths) || !Array.isArray(o.mat) || o.mat.length !== 6 || !o.mat.every(isNum)) {
-    throw new ProjectError("Invalid object");
+    throw new ProjectError(t("Invalid object"));
   }
-  o.paths.forEach((p) => checkPath(p, `object "${o.name}"`));
+  o.paths.forEach((p) => checkPath(p, t("object \"{name}\"", { name: String(o.name) })));
   if (o.children !== undefined) {
-    if (!Array.isArray(o.children)) throw new ProjectError(`Invalid group "${o.name}"`);
+    if (!Array.isArray(o.children)) throw new ProjectError(t("Invalid group \"{name}\"", { name: String(o.name) }));
     o.children.forEach((c) => checkObject(c, depth + 1));
   }
   return o as unknown as SceneObject;
@@ -62,7 +65,7 @@ function checkObject(o: unknown, depth = 0): SceneObject {
 
 function checkLayer(l: unknown): Layer {
   if (!isObj(l) || !isStr(l.color) || !isNum(l.speed) || !isNum(l.minPower) || !isNum(l.maxPower) || !isNum(l.passes) || typeof l.output !== "boolean") {
-    throw new ProjectError("Invalid layer settings");
+    throw new ProjectError(t("Invalid layer settings"));
   }
   return l as unknown as Layer;
 }
@@ -73,12 +76,12 @@ export function parseProject(text: string): ProjectFile {
   try {
     raw = JSON.parse(text);
   } catch {
-    throw new ProjectError("Not a project file (not valid JSON)");
+    throw new ProjectError(t("Not a project file (not valid JSON)"));
   }
-  if (!isObj(raw) || raw.format !== PROJECT_FORMAT) throw new ProjectError("Not a .laserproj project file");
-  if (!isNum(raw.version) || raw.version < 1) throw new ProjectError("Unknown project file version");
-  if (raw.version > PROJECT_VERSION) throw new ProjectError(`This project was saved by a newer version of the app (format ${raw.version}); update the app to open it`);
-  if (!isObj(raw.doc) || !Array.isArray(raw.doc.objects)) throw new ProjectError("The project has no drawing");
+  if (!isObj(raw) || raw.format !== PROJECT_FORMAT) throw new ProjectError(t("Not a .laserproj project file"));
+  if (!isNum(raw.version) || raw.version < 1) throw new ProjectError(t("Unknown project file version"));
+  if (raw.version > PROJECT_VERSION) throw new ProjectError(t("This project was saved by a newer version of the app (format {v}); update the app to open it", { v: raw.version }));
+  if (!isObj(raw.doc) || !Array.isArray(raw.doc.objects)) throw new ProjectError(t("The project has no drawing"));
   const objects = raw.doc.objects.map((o) => checkObject(o));
   const layers = Array.isArray(raw.doc.layers) ? raw.doc.layers.map(checkLayer) : [];
   const job = isObj(raw.job) ? raw.job : {};
@@ -97,7 +100,7 @@ export function parseProject(text: string): ProjectFile {
       startFrom: job.startFrom === "current" ? "current" : "absolute",
       innerFirst: job.innerFirst !== false,
     },
-    doc: { objects, layers },
+    doc: migrateDoc({ objects, layers }),
   };
 }
 

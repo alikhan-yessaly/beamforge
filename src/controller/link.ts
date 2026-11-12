@@ -1,4 +1,5 @@
 import { splitCommands } from "../protocol/chunk";
+import { t } from "../i18n";
 import { decodeReplies, type MemoryReply } from "../protocol/decode";
 import { ADDR_CARD_ID, hasForbiddenParamWrite, queryCardId } from "../protocol/encode";
 import { DEFAULT_MAGIC, swizzle, unswizzle } from "../protocol/swizzle";
@@ -56,7 +57,7 @@ export class RuidaLink {
   }
 
   async connect(): Promise<void> {
-    if (this.transport.isOpen) throw new Error("Already connected");
+    if (this.transport.isOpen) throw new Error(t("Already connected"));
     this.unsubscribe();
     await this.transport.open();
     this.offData = this.transport.onData((b) => this.handleRx(b));
@@ -88,8 +89,8 @@ export class RuidaLink {
   async send(plain: Uint8Array, note?: string): Promise<void> {
     if (!this.devMode) {
       if (!isReadQuery(plain)) {
-        if (!this.verified) throw new Error("Not verified: read the Card ID successfully before sending commands");
-        if (hasForbiddenParamWrite(splitCommands(plain))) throw new Error("Memory writes are only available in developer mode");
+        if (!this.verified) throw new Error(t("Not verified: read the Card ID successfully before sending commands"));
+        if (hasForbiddenParamWrite(splitCommands(plain))) throw new Error(t("Memory writes are only available in developer mode"));
       }
     }
     const wire = swizzle(plain, this.magic);

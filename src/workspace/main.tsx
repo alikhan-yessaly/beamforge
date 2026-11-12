@@ -1,3 +1,4 @@
+import { msg, t } from "../i18n";
 import { Layers, PanelRightClose, PanelRightOpen, SwatchBook } from "lucide-preact";
 import { render } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
@@ -16,6 +17,7 @@ import { MachineTab } from "./MachineTab";
 import { PaletteBar } from "./PaletteBar";
 import { MaterialsPanel } from "./MaterialsPanel";
 import { ConnectButton } from "./ConnectButton";
+import { LangSwitch } from "./LangSwitch";
 import { ContextMenu } from "./ContextMenu";
 import { StartDialog } from "./StartDialog";
 import { SketchToolbar } from "./sketch/SketchToolbar";
@@ -23,9 +25,9 @@ import { session as sketchSession } from "./sketch/state";
 import { ShortcutSheet } from "./ShortcutSheet";
 
 const TABS = [
-  { name: "layers", icon: Layers, label: "Layers and objects" },
-  { name: "materials", icon: SwatchBook, label: "Material library" },
-  { name: "machine", icon: LaserCutter, label: "Machine: position, jog and profile" },
+  { name: "layers", icon: Layers, label: msg("Layers and objects") },
+  { name: "materials", icon: SwatchBook, label: msg("Material library") },
+  { name: "machine", icon: LaserCutter, label: msg("Machine: position, jog and profile") },
 ] as const;
 
 function App() {
@@ -45,22 +47,23 @@ function App() {
   return (
     <div class="ws">
       <div class="ws-beta">
-        <strong>BeamForge Beta</strong> · Tested on one RDC644XS controller. Features and other controllers are not fully verified.
-        {" "}<a href="https://github.com/alikhan-yessaly/beamforge#safety-and-limitations" target="_blank" rel="noopener noreferrer">Safety and limitations</a>
+        <strong>BeamForge Beta</strong> · {t("Tested on one RDC644XS controller. Features and other controllers are not fully verified.")}
+        {" "}<a href="https://github.com/alikhan-yessaly/beamforge#safety-and-limitations" target="_blank" rel="noopener noreferrer">{t("Safety and limitations")}</a>
       </div>
       <div class={`ws-top${sketching && connected && !running ? " ws-sketch-stop-space" : ""}`}>
         {sketching ? <SketchToolbar /> : <Toolbar />}
+        {!sketching && <LangSwitch />}
         {!sketching && <ConnectButton />}
       </div>
       <div class="ws-body">
         <Canvas />
         <aside class={`ws-side${sidebar ? "" : " collapsed"}`} id="workspace-sidebar" hidden={sketching}>
-          <nav class="ws-tabs" aria-label="Workspace panels">
+          <nav class="ws-tabs" aria-label={t("Workspace panels")}>
             {TABS.map(({ name, icon, label }) => (
               <IconButton
                 key={name}
                 icon={icon}
-                label={label}
+                label={t(label)}
                 class={sidebar && tab === name ? "active" : ""}
                 pressed={sidebar && tab === name}
                 onClick={() => {
@@ -70,7 +73,7 @@ function App() {
               />
             ))}
             <span class="ws-grow" />
-            <IconButton icon={sidebar ? PanelRightClose : PanelRightOpen} label={sidebar ? "Collapse the sidebar" : "Expand the sidebar"} onClick={() => setSidebar(!sidebar)} />
+            <IconButton icon={sidebar ? PanelRightClose : PanelRightOpen} label={sidebar ? t("Collapse the sidebar") : t("Expand the sidebar")} onClick={() => setSidebar(!sidebar)} />
           </nav>
           <div class="ws-side-body" hidden={!sidebar}>
           <div hidden={tab !== "layers"}>

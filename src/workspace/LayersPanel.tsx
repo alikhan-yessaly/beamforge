@@ -1,3 +1,4 @@
+import { msg, t, tp } from "../i18n";
 import { BookmarkPlus, Check, ChevronDown, ChevronUp, Download, Eye, EyeOff, Gauge, type LucideIcon, MoveVertical, Repeat, RotateCcw, RotateCw, Save, SwatchBook, Target, X, Zap, ZapOff } from "lucide-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { IconButton, IconToggle } from "../ui/icons";
@@ -42,21 +43,21 @@ function MaterialRow(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "co
   const settings = { speed: l.speed, minPower: l.minPower, maxPower: l.maxPower, passes: l.passes };
   const saveNew = () => {
     const p = { id: newId(), name: (naming ?? "").trim(), machine, ...settings };
-    if (!validPreset(p)) return notify("Give the preset a name (settings must be valid).", "error");
-    if (!savePresets([...presets.value, p])) return notify(presetsError.value ?? "Could not save the preset.", "error");
+    if (!validPreset(p)) return notify(t("Give the preset a name (settings must be valid)."), "error");
+    if (!savePresets([...presets.value, p])) return notify(presetsError.value ?? t("Could not save the preset."), "error");
     props.set({ material: p.id });
     setNaming(null);
   };
   const updatePreset = () => {
-    if (!preset || !window.confirm(`Update preset "${preset.name}" with this layer's settings?`)) return;
-    if (!savePresets(presets.value.map((p) => (p.id === preset.id ? { ...p, ...settings } : p)))) notify("Could not save the preset.", "error");
+    if (!preset || !window.confirm(t("Update preset \"{name}\" with this layer's settings?", { name: preset.name }))) return;
+    if (!savePresets(presets.value.map((p) => (p.id === preset.id ? { ...p, ...settings } : p)))) notify(t("Could not save the preset."), "error");
   };
   const nameField = naming !== null && (
     <div class="ws-layer-material">
       <input
         class="ws-grow"
-        placeholder="Preset name, e.g. 3 mm plywood cut"
-        aria-label="New preset name"
+        placeholder={t("Preset name, e.g. 3 mm plywood cut")}
+        aria-label={t("New preset name")}
         value={naming}
         ref={nameRef}
         onInput={(e) => setNaming(e.currentTarget.value)}
@@ -65,8 +66,8 @@ function MaterialRow(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "co
           if (e.key === "Escape") setNaming(null);
         }}
       />
-      <IconButton icon={Check} label="Save the preset" onClick={saveNew} />
-      <IconButton icon={X} label="Cancel" onClick={() => setNaming(null)} />
+      <IconButton icon={Check} label={t("Save the preset")} onClick={saveNew} />
+      <IconButton icon={X} label={t("Cancel")} onClick={() => setNaming(null)} />
     </div>
   );
   if (list.length === 0) {
@@ -75,8 +76,8 @@ function MaterialRow(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "co
       <>
         <div class="ws-layer-material">
           <SwatchBook size={14} strokeWidth={1.75} aria-hidden="true" />
-          <small class="ws-grow">No material presets yet</small>
-          <IconButton icon={BookmarkPlus} label="Save these settings as a material preset" pressed={naming !== null} onClick={() => setNaming(naming === null ? "" : null)} />
+          <small class="ws-grow">{t("No material presets yet")}</small>
+          <IconButton icon={BookmarkPlus} label={t("Save these settings as a material preset")} pressed={naming !== null} onClick={() => setNaming(naming === null ? "" : null)} />
         </div>
         {nameField}
       </>
@@ -87,15 +88,15 @@ function MaterialRow(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "co
       <div class="ws-layer-material">
         <SwatchBook size={14} strokeWidth={1.75} aria-hidden="true" />
         <select
-          aria-label="Material preset"
-          title="Material preset: fills in speed, power and passes"
+          aria-label={t("Material preset")}
+          title={t("Material preset: fills in speed, power and passes")}
           value={preset?.id ?? ""}
           onChange={(e) => {
             const p = list.find((x) => x.id === e.currentTarget.value);
             props.set(p ? { ...presetSettings(p), material: p.id } : { material: undefined });
           }}
         >
-          <option value="">Custom settings</option>
+          <option value="">{t("Custom settings")}</option>
           {list.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -104,12 +105,12 @@ function MaterialRow(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "co
         </select>
         {edited && (
           <>
-            <span class="ws-badge" title="These settings differ from the preset">edited</span>
-            <IconButton icon={RotateCcw} label="Revert to the preset's settings" onClick={() => preset && props.set(presetSettings(preset))} />
-            <IconButton icon={Save} label="Update the preset with these settings" onClick={updatePreset} />
+            <span class="ws-badge" title={t("These settings differ from the preset")}>{t("edited")}</span>
+            <IconButton icon={RotateCcw} label={t("Revert to the preset's settings")} onClick={() => preset && props.set(presetSettings(preset))} />
+            <IconButton icon={Save} label={t("Update the preset with these settings")} onClick={updatePreset} />
           </>
         )}
-        {!preset && <IconButton icon={BookmarkPlus} label="Save these settings as a new preset" pressed={naming !== null} onClick={() => setNaming(naming === null ? "" : null)} />}
+        {!preset && <IconButton icon={BookmarkPlus} label={t("Save these settings as a new preset")} pressed={naming !== null} onClick={() => setNaming(naming === null ? "" : null)} />}
       </div>
       {nameField}
     </>
@@ -117,15 +118,14 @@ function MaterialRow(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "co
 }
 
 const MODES: { mode: LayerMode; icon: LucideIcon; label: string }[] = [
-  { mode: "cut", icon: ModeCut, label: "Cut: follow the outlines" },
-  { mode: "fill", icon: ModeFill, label: "Fill: engrave the inside of closed shapes" },
-  { mode: "fillCut", icon: ModeFillCut, label: "Fill, then cut the outlines" },
+  { mode: "cut", icon: ModeCut, label: msg("Cut: follow the outlines") },
+  { mode: "fill", icon: ModeFill, label: msg("Fill: engrave the inside of closed shapes and the areas filled with this colour") },
 ];
 const PATTERNS: { pattern: FillPattern; icon: LucideIcon; label: string }[] = [
-  { pattern: "lines", icon: PatternLines, label: "Lines" },
-  { pattern: "cross", icon: PatternCross, label: "Cross-hatch" },
-  { pattern: "dots", icon: PatternDots, label: "Dots" },
-  { pattern: "offset", icon: PatternOffset, label: "Offset (contours stepping inward)" },
+  { pattern: "lines", icon: PatternLines, label: msg("Lines") },
+  { pattern: "cross", icon: PatternCross, label: msg("Cross-hatch") },
+  { pattern: "dots", icon: PatternDots, label: msg("Dots") },
+  { pattern: "offset", icon: PatternOffset, label: msg("Offset (contours stepping inward)") },
 ];
 
 /** Cut / fill mode and, for fill modes, the pattern, spacing and angle. */
@@ -137,15 +137,15 @@ function ModeRows(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "color
   return (
     <>
       <div class="ws-mode">
-        <div class="ws-segmented" role="group" aria-label="Layer mode">
+        <div class="ws-segmented" role="group" aria-label={t("Layer mode")}>
           {MODES.map((m) => (
-            <IconButton key={m.mode} icon={m.icon} label={m.label} pressed={mode === m.mode} onClick={() => props.set({ mode: m.mode })} />
+            <IconButton key={m.mode} icon={m.icon} label={t(m.label)} pressed={mode === m.mode} onClick={() => props.set({ mode: m.mode })} />
           ))}
         </div>
         {mode !== "cut" && (
-          <div class="ws-segmented" role="group" aria-label="Fill pattern">
+          <div class="ws-segmented" role="group" aria-label={t("Fill pattern")}>
             {PATTERNS.map((p) => (
-              <IconButton key={p.pattern} icon={p.icon} label={`Fill pattern: ${p.label}`} pressed={fill.pattern === p.pattern} onClick={() => setFill({ pattern: p.pattern })} />
+              <IconButton key={p.pattern} icon={p.icon} label={t("Fill pattern: {name}", { name: t(p.label) })} pressed={fill.pattern === p.pattern} onClick={() => setFill({ pattern: p.pattern })} />
             ))}
           </div>
         )}
@@ -154,7 +154,7 @@ function ModeRows(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "color
         <div class="ws-layer-fields">
           <Field
             icon={MoveVertical}
-            label={fill.pattern === "dots" ? "Dot spacing" : fill.pattern === "offset" ? "Contour spacing" : "Line spacing"}
+            label={fill.pattern === "dots" ? t("Dot spacing") : fill.pattern === "offset" ? t("Contour spacing") : t("Line spacing")}
             unit="mm"
             value={fill.interval}
             step={0.05}
@@ -163,7 +163,7 @@ function ModeRows(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "color
             onCommit={(interval) => setFill({ interval })}
           />
           {fill.pattern !== "offset" && (
-            <Field icon={RotateCw} label="Angle" unit="°" value={fill.angle} step={15} onCommit={(angle) => setFill({ angle: ((angle % 180) + 180) % 180 })} />
+            <Field icon={RotateCw} label={t("Angle")} unit="°" value={fill.angle} step={15} onCommit={(angle) => setFill({ angle: ((angle % 180) + 180) % 180 })} />
           )}
         </div>
       )}
@@ -186,7 +186,7 @@ function LayerRow(props: { layer: Layer; index: number; count: number; seconds: 
       class={`ws-lrow${props.selected ? " on" : ""}${l.output ? "" : " off"}`}
       aria-selected={props.selected}
       onClick={() => (selectedLayer.value = l.color)}
-      title={`Layer ${props.index + 1} (${l.color}): ${MODES.find((m) => m.mode === mode)!.label}. Click to edit.`}
+      title={t("Layer {n} ({color}): {mode}. Click to edit.", { n: props.index + 1, color: l.color, mode: t(MODES.find((m) => m.mode === mode)?.label ?? MODES[0]!.label) })}
     >
       <i class="ws-swatch" style={{ background: l.color }} />
       <b>{String(props.index + 1).padStart(2, "0")}</b>
@@ -196,14 +196,14 @@ function LayerRow(props: { layer: Layer; index: number; count: number; seconds: 
         <small>mm/s</small> {power}
         {l.passes > 1 && <small> ×{l.passes}</small>}
       </span>
-      <IconToggle on={l.show !== false} onIcon={Eye} offIcon={EyeOff} label="Show (off = dotted shadow; shown paths set the current-head job reference)" onChange={(show) => set({ show })} />
-      <IconToggle on={l.output} onIcon={Zap} offIcon={ZapOff} label="Output (cut this layer)" onChange={(output) => set({ output })} />
-      <small class="ws-lrow-time" title="Estimated time for this layer">
+      <IconToggle on={l.show !== false} onIcon={Eye} offIcon={EyeOff} label={t("Show (off = dotted shadow; shown paths set the current-head job reference)")} onChange={(show) => set({ show })} />
+      <IconToggle on={l.output} onIcon={Zap} offIcon={ZapOff} label={t("Output (cut this layer)")} onChange={(output) => set({ output })} />
+      <small class="ws-lrow-time" title={t("Estimated time for this layer")}>
         {props.seconds !== null ? formatDuration(props.seconds) : "—"}
       </small>
       <span class="ws-lrow-order">
-        <IconButton icon={ChevronUp} label="Cut earlier" disabled={props.index === 0} onClick={() => commit(moveLayer(doc.value, l.color, -1))} />
-        <IconButton icon={ChevronDown} label="Cut later" disabled={props.index === props.count - 1} onClick={() => commit(moveLayer(doc.value, l.color, 1))} />
+        <IconButton icon={ChevronUp} label={t("Cut earlier")} disabled={props.index === 0} onClick={() => commit(moveLayer(doc.value, l.color, -1))} />
+        <IconButton icon={ChevronDown} label={t("Cut later")} disabled={props.index === props.count - 1} onClick={() => commit(moveLayer(doc.value, l.color, 1))} />
       </span>
     </li>
   );
@@ -217,14 +217,14 @@ function LayerEditor(props: { layer: Layer; index: number }) {
     <div class="ws-layer ws-layer-editor">
       <div class="ws-layer-head">
         <i class="ws-swatch" style={{ background: l.color }} title={l.color} />
-        <b>Layer {String(props.index + 1).padStart(2, "0")}</b>
+        <b>{t("Layer {n}", { n: String(props.index + 1).padStart(2, "0") })}</b>
         <small>{l.color}</small>
       </div>
       <ModeRows layer={l} set={set} />
       <MaterialRow layer={l} set={set} />
       <div class="ws-layer-fields">
-        <Field icon={Gauge} label="Speed" unit="mm/s" value={l.speed} step={1} min={0.1} onCommit={(speed) => set({ speed })} />
-        <Field icon={Repeat} label="Passes" unit="×" value={l.passes} step={1} min={1} max={99} onCommit={(passes) => set({ passes })} />
+        <Field icon={Gauge} label={t("Speed")} unit="mm/s" value={l.speed} step={1} min={0.1} onCommit={(speed) => set({ speed })} />
+        <Field icon={Repeat} label={t("Passes")} unit="×" value={l.passes} step={1} min={1} max={99} onCommit={(passes) => set({ passes })} />
       </div>
       <PowerRow min={l.minPower} max={l.maxPower} speed={l.speed} linked={powerLinked(l)} onChange={set} />
     </div>
@@ -237,7 +237,7 @@ function saveRd(): void {
   try {
     const bytes = buildRdFile(doc.value, profile.value, { mode: pr.startFrom, innerFirst: pr.innerFirst });
     const hidden = activeLayers(doc.value).filter((l) => l.output && l.show === false);
-    if (hidden.length && !window.confirm(`This file includes ${hidden.length} dotted output layer(s). Dotted layers are still cut. Save it anyway?`)) return;
+    if (hidden.length && !window.confirm(tp(["This file includes {n} dotted output layer. Dotted layers are still cut. Save it anyway?", "This file includes {n} dotted output layers. Dotted layers are still cut. Save it anyway?"], hidden.length))) return;
     const name = (doc.value.objects[0]?.name ?? "job").replace(/\.dxf$/i, "");
     const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/octet-stream" }));
     const a = Object.assign(document.createElement("a"), { href: url, download: `${name}.rd` });
@@ -264,7 +264,7 @@ export function LayersPanel() {
   };
   return (
     <section class="ws-panel">
-      <h3>Layers</h3>
+      <h3>{t("Layers")}</h3>
       {tp.errors.map((e) => (
         <p key={e} class="ws-plan-msg error" role="alert">
           {e}
@@ -275,18 +275,18 @@ export function LayersPanel() {
           {w}
         </p>
       ))}
-      <ul class="ws-lrows" role="listbox" aria-label="Layers in cut order">
+      <ul class="ws-lrows" role="listbox" aria-label={t("Layers in cut order")}>
         {layers.map((l, i) => (
           <LayerRow key={l.color} layer={l} index={i} count={layers.length} seconds={secondsFor(l)} selected={l === sel} />
         ))}
-        {layers.length === 0 && <li class="ws-empty">Layers appear here, one per colour in the drawing</li>}
+        {layers.length === 0 && <li class="ws-empty">{t("Layers appear here, one per colour in the drawing")}</li>}
       </ul>
       {sel && <LayerEditor layer={sel} index={selIndex} />}
       {layers.length > 0 && (
         <div class="ws-row ws-layers-foot">
-          <IconToggle on={pr.innerFirst} onIcon={Target} label="Cut inner shapes first (holes before the outline around them)" onChange={(innerFirst) => (prefs.value = { ...pr, innerFirst })} />
+          <IconToggle on={pr.innerFirst} onIcon={Target} label={t("Cut inner shapes first (holes before the outline around them)")} onChange={(innerFirst) => (prefs.value = { ...pr, innerFirst })} />
           <span class="ws-grow" />
-          <IconButton icon={Download} label="Export the job as a Ruida .rd file" disabled={tp.segments.length === 0} onClick={saveRd} />
+          <IconButton icon={Download} label={t("Export the job as a Ruida .rd file")} disabled={tp.segments.length === 0} onClick={saveRd} />
         </div>
       )}
     </section>
@@ -298,7 +298,7 @@ export function PreviewBar() {
   const pv = preview.value;
   if (!pv.on) return null;
   const total = jobEstimate.value.total;
-  const t = Math.min(pv.t, total);
+  const at = Math.min(pv.t, total);
   return (
     <span class="ws-scrub">
       <input
@@ -306,11 +306,11 @@ export function PreviewBar() {
         min={0}
         max={total}
         step={total / 1000 || 1}
-        value={t}
+        value={at}
         onInput={(e) => (preview.value = { on: true, t: Number(e.currentTarget.value) })}
       />
-      {formatDuration(t)} / {formatDuration(total)}
-      <IconButton icon={X} label="Close preview (P)" onClick={togglePreview} />
+      {formatDuration(at)} / {formatDuration(total)}
+      <IconButton icon={X} label={t("Close preview (P)")} onClick={togglePreview} />
     </span>
   );
 }

@@ -15,6 +15,7 @@ import {
   readMemory,
   stopJob,
 } from "../protocol/encode";
+import { t } from "../i18n";
 import type { RuidaLink } from "./link";
 
 /**
@@ -137,7 +138,7 @@ export class Motion {
   async frame(min: Vec2, max: Vec2, speedMmS: number, onProgress?: (p: Vec2) => void): Promise<void> {
     checkSpeed(speedMmS);
     const bed = await this.bedSize();
-    if (min.x < 0 || min.y < 0 || max.x > bed.x || max.y > bed.y) throw new Error("The frame is outside the bed");
+    if (min.x < 0 || min.y < 0 || max.x > bed.x || max.y > bed.y) throw new Error(t("The frame is outside the bed"));
     const start = await this.position();
     await this.link.send(frameCommands(min, max, speedMmS, start), "frame");
     // Generous bound: the sides at the frame speed, approach and return at no less than 10 mm/s, plus slack.
@@ -153,7 +154,7 @@ export class Motion {
       if (moving) seenMoving = true;
       // The controller may report idle for a moment before it starts the queued moves.
       if (!moving && (seenMoving || performance.now() - t0 > 1000)) return;
-      if (performance.now() - t0 > timeoutMs) throw new Error("Frame did not finish in time; check the machine");
+      if (performance.now() - t0 > timeoutMs) throw new Error(t("Frame did not finish in time; check the machine"));
     }
   }
 
@@ -164,7 +165,7 @@ export class Motion {
     for (;;) {
       if (gen !== this.generation) throw new StoppedError();
       if (!(await this.isMoving())) return;
-      if (performance.now() - t0 > timeoutS * 1000) throw new Error("Move segment timed out");
+      if (performance.now() - t0 > timeoutS * 1000) throw new Error(t("Move segment timed out"));
     }
   }
 
@@ -179,7 +180,7 @@ export class Motion {
 }
 
 function checkSpeed(v: number): void {
-  if (!(v > 0 && v <= MAX_SPEED_MM_S)) throw new Error(`Speed must be 0-${MAX_SPEED_MM_S} mm/s`);
+  if (!(v > 0 && v <= MAX_SPEED_MM_S)) throw new Error(t("Speed must be 0–{max} mm/s", { max: MAX_SPEED_MM_S }));
 }
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

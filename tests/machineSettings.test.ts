@@ -28,7 +28,7 @@ describe("machine settings", () => {
       const results = await query(command, timeout, note);
       return results.map((r) => r.addr === ADDR_BED_X ? { ...r, value: 0xf2390000 } : r);
     };
-    await expect(readBedDimensions(link)).rejects.toThrow(/Invalid bed width/);
+    await expect(readBedDimensions(link)).rejects.toThrow(/invalid bed width/);
     link.query = async () => [];
     await expect(readBedDimensions(link)).rejects.toThrow(/No reply/);
     await link.disconnect();

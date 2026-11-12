@@ -1,4 +1,5 @@
 // Sketch-mode toolbar (replaces the main toolbar while a sketch is open) and the inline dimension editor.
+import { msg, t, tp } from "../../i18n";
 import {
   Check,
   Circle,
@@ -26,6 +27,7 @@ import { addConstraint } from "../../sketch/model";
 import { measure, solve } from "../../sketch/solver";
 import { view } from "../view";
 import type { ConstraintTool } from "../../sketch/constrain";
+import type { ConstraintType } from "../../sketch/model";
 import {
   CnCoincident,
   CnConcentric,
@@ -57,88 +59,114 @@ import { DEFAULT_FONT, canListLocalFonts, localFontFamilies } from "./fonts";
 
 const TOOLS: { tool: Tool; icon: LucideIcon; label: string }[][] = [
   [
-    { tool: "line", icon: SkLine, label: "Line (L): click points; Esc or right-click ends" },
-    { tool: "rect", icon: RectangleHorizontal, label: "Rectangle from corners (R)" },
-    { tool: "rectCenter", icon: SquareDot, label: "Rectangle from centre" },
-    { tool: "circle", icon: Circle, label: "Circle: centre, then radius (C)" },
-    { tool: "arc3", icon: SkArc3, label: "Arc through 3 points: start, end, then a point on it (A)" },
-    { tool: "arcCenter", icon: SkArcCenter, label: "Arc from centre: centre, start, end" },
-    { tool: "arcTangent", icon: SkArcTangent, label: "Tangent arc: start at the end of a line or arc" },
-    { tool: "slot", icon: SkSlot, label: "Slot: two centres, then width" },
-    { tool: "polygon", icon: Hexagon, label: "Polygon: centre, then a corner (G)" },
-    { tool: "spline", icon: Spline, label: "Spline through points (N); Enter or double-click ends" },
-    { tool: "point", icon: Dot, label: "Point (P)" },
-    { tool: "text", icon: Type, label: "Text (X)" },
+    { tool: "line", icon: SkLine, label: msg("Line (L): click points; Esc or right-click ends") },
+    { tool: "rect", icon: RectangleHorizontal, label: msg("Rectangle from corners (R)") },
+    { tool: "rectCenter", icon: SquareDot, label: msg("Rectangle from centre") },
+    { tool: "circle", icon: Circle, label: msg("Circle: centre, then radius (C)") },
+    { tool: "arc3", icon: SkArc3, label: msg("Arc through 3 points: start, end, then a point on it (A)") },
+    { tool: "arcCenter", icon: SkArcCenter, label: msg("Arc from centre: centre, start, end") },
+    { tool: "arcTangent", icon: SkArcTangent, label: msg("Tangent arc: start at the end of a line or arc") },
+    { tool: "slot", icon: SkSlot, label: msg("Slot: two centres, then width") },
+    { tool: "polygon", icon: Hexagon, label: msg("Polygon: centre, then a corner (G)") },
+    { tool: "spline", icon: Spline, label: msg("Spline through points (N); Enter or double-click ends") },
+    { tool: "point", icon: Dot, label: msg("Point (P)") },
+    { tool: "text", icon: Type, label: msg("Text (X)") },
   ],
   [
-    { tool: "trim", icon: Scissors, label: "Trim: click a piece to remove it (T)" },
-    { tool: "fillet", icon: SkFillet, label: "Fillet: click a corner (F)" },
-    { tool: "chamfer", icon: SkChamfer, label: "Chamfer: click a corner" },
-    { tool: "offset", icon: SkOffset, label: "Offset: click a shape, then the side (O)" },
-    { tool: "mirror", icon: FlipHorizontal2, label: "Mirror: select geometry, then click the mirror line (M)" },
-    { tool: "linearPattern", icon: LayoutGrid, label: "Linear / grid pattern of the selection" },
-    { tool: "circularPattern", icon: SkCircularPattern, label: "Circular pattern of the selection: click the centre" },
+    { tool: "trim", icon: Scissors, label: msg("Trim: click a piece to remove it (T)") },
+    { tool: "fillet", icon: SkFillet, label: msg("Fillet: click a corner (F)") },
+    { tool: "chamfer", icon: SkChamfer, label: msg("Chamfer: click a corner") },
+    { tool: "offset", icon: SkOffset, label: msg("Offset: click a shape, then the side (O)") },
+    { tool: "mirror", icon: FlipHorizontal2, label: msg("Mirror: select geometry, then click the mirror line (M)") },
+    { tool: "linearPattern", icon: LayoutGrid, label: msg("Linear / grid pattern of the selection") },
+    { tool: "circularPattern", icon: SkCircularPattern, label: msg("Circular pattern of the selection: click the centre") },
   ],
-  [{ tool: "dimension", icon: RulerDimensionLine, label: "Dimension (D): click geometry, then where the value goes; double-click a value to edit it" }],
+  [{ tool: "dimension", icon: RulerDimensionLine, label: msg("Dimension (D): click geometry, then where the value goes; double-click a value to edit it") }],
 ];
 
 const CONSTRAINTS: { c: ConstraintTool; icon: LucideIcon; label: string }[] = [
-  { c: "coincident", icon: CnCoincident, label: "Coincident: two points, or a point on a line/circle" },
-  { c: "horizontal", icon: CnHorizontal, label: "Horizontal: lines, or two points" },
-  { c: "vertical", icon: CnVertical, label: "Vertical: lines, or two points" },
-  { c: "parallel", icon: CnParallel, label: "Parallel: two lines" },
-  { c: "perpendicular", icon: CnPerpendicular, label: "Perpendicular: two lines" },
-  { c: "tangent", icon: CnTangent, label: "Tangent: line and circle/arc, or two circles/arcs" },
-  { c: "equal", icon: Equal, label: "Equal: two lines (length) or two circles/arcs (radius)" },
-  { c: "midpoint", icon: CnMidpoint, label: "Midpoint: a point and a line" },
-  { c: "concentric", icon: CnConcentric, label: "Concentric: two circles/arcs" },
-  { c: "symmetric", icon: CnSymmetric, label: "Symmetric: two points and a line" },
-  { c: "fix", icon: Pin, label: "Fix: pin the selected points/geometry in place (again to release)" },
+  { c: "coincident", icon: CnCoincident, label: msg("Coincident: two points, or a point on a line/circle") },
+  { c: "horizontal", icon: CnHorizontal, label: msg("Horizontal: lines, or two points") },
+  { c: "vertical", icon: CnVertical, label: msg("Vertical: lines, or two points") },
+  { c: "parallel", icon: CnParallel, label: msg("Parallel: two lines") },
+  { c: "perpendicular", icon: CnPerpendicular, label: msg("Perpendicular: two lines") },
+  { c: "tangent", icon: CnTangent, label: msg("Tangent: line and circle/arc, or two circles/arcs") },
+  { c: "equal", icon: Equal, label: msg("Equal: two lines (length) or two circles/arcs (radius)") },
+  { c: "midpoint", icon: CnMidpoint, label: msg("Midpoint: a point and a line") },
+  { c: "concentric", icon: CnConcentric, label: msg("Concentric: two circles/arcs") },
+  { c: "symmetric", icon: CnSymmetric, label: msg("Symmetric: two points and a line") },
+  { c: "fix", icon: Pin, label: msg("Fix: pin the selected points/geometry in place (again to release)") },
 ];
+
+const CONSTRAINT_NAME: Record<ConstraintType, string> = {
+  coincident: msg("coincident"),
+  pointOnLine: msg("point on line"),
+  pointOnCircle: msg("point on curve"),
+  horizontal: msg("horizontal"),
+  vertical: msg("vertical"),
+  horizontalPts: msg("horizontal"),
+  verticalPts: msg("vertical"),
+  parallel: msg("parallel"),
+  perpendicular: msg("perpendicular"),
+  tangent: msg("tangent"),
+  equal: msg("equal"),
+  midpoint: msg("midpoint"),
+  concentric: msg("concentric"),
+  symmetric: msg("symmetric"),
+  fix: msg("fix"),
+  distance: msg("distance"),
+  distanceX: msg("horizontal distance"),
+  distanceY: msg("vertical distance"),
+  pointLineDistance: msg("distance to line"),
+  radius: msg("radius"),
+  diameter: msg("diameter"),
+  angle: msg("angle"),
+};
 
 export function SketchToolbar() {
   const s = session.value;
   if (!s) return null;
   const st = s.status;
   const problems = [...new Set([...st.conflicting, ...(st.redundant ?? [])])];
-  const statusText = !s.sketch.entities.length ? "Empty sketch" : !st.ok ? "Conflict" : problems.length ? "Overconstrained" : st.dof === 0 ? "Fully defined" : `${st.dof} degree${st.dof === 1 ? "" : "s"} of freedom`;
+  const statusText = !s.sketch.entities.length ? t("Empty sketch") : !st.ok ? t("Conflict") : problems.length ? t("Overconstrained") : st.dof === 0 ? t("Fully defined") : tp(["{n} degree of freedom", "{n} degrees of freedom"], st.dof);
   return (
     <div class="ws-toolbar ws-sketchbar">
-      <IconButton icon={Check} class="ws-primary" label="Finish the sketch (keeps your changes as one undo step)" onClick={() => finishSketch(true)} />
-      <IconButton icon={X} label="Cancel: discard the changes to this sketch" onClick={cancelSketch} />
+      <IconButton icon={Check} class="ws-primary" label={t("Finish the sketch (keeps your changes as one undo step)")} onClick={() => finishSketch(true)} />
+      <IconButton icon={X} label={t("Cancel: discard the changes to this sketch")} onClick={cancelSketch} />
       <span class="ws-sep" />
-      <IconButton icon={Undo2} label="Sketch undo (⌘Z)" disabled={!s.undo.length} onClick={() => (undoSketch(), resetTool())} />
-      <IconButton icon={Redo2} label="Sketch redo (⇧⌘Z)" disabled={!s.redo.length} onClick={() => (redoSketch(), resetTool())} />
+      <IconButton icon={Undo2} label={t("Sketch undo (⌘Z)")} disabled={!s.undo.length} onClick={() => (undoSketch(), resetTool())} />
+      <IconButton icon={Redo2} label={t("Sketch redo (⇧⌘Z)")} disabled={!s.redo.length} onClick={() => (redoSketch(), resetTool())} />
       {TOOLS.map((group, i) => (
         <>
           <span class="ws-sep" key={`sep${i}`} />
-          {group.map((t) => (
+          {group.map((tl) => (
             <IconButton
-              key={t.tool}
-              icon={t.icon}
-              label={t.label}
-              pressed={s.tool === t.tool}
+              key={tl.tool}
+              icon={tl.icon}
+              label={t(tl.label)}
+              pressed={s.tool === tl.tool}
               onClick={() => {
                 resetTool();
-                setTool(t.tool);
+                setTool(tl.tool);
               }}
             />
           ))}
         </>
       ))}
-      <IconButton icon={SkConstruction} label={`Construction (Q): toggle the selection, or draw new geometry as construction${s.construction ? " (on)" : ""}`} pressed={s.construction} onClick={toggleConstruction} />
+      <IconButton icon={SkConstruction} label={`${t("Construction (Q): toggle the selection, or draw new geometry as construction")}${s.construction ? ` (${t("on")})` : ""}`} pressed={s.construction} onClick={toggleConstruction} />
       <span class="ws-sep" />
       {CONSTRAINTS.map((c) => (
-        <IconButton key={c.c} icon={c.icon} label={c.label} disabled={!s.selected.size} onClick={() => constrainSelected(c.c)} />
+        <IconButton key={c.c} icon={c.icon} label={t(c.label)} disabled={!s.selected.size} onClick={() => constrainSelected(c.c)} />
       ))}
       <ToolOptions tool={s.tool} />
       <span class="ws-grow" />
-      <span class={`ws-sketch-status ${!st.ok || problems.length ? "bad" : st.dof === 0 && s.sketch.entities.length ? "ok" : ""}`} title="Blue: free to move · black: fully defined · red: conflicting or redundant constraints">
+      <ScaleNote mat={s.mat} />
+      <span class={`ws-sketch-status ${!st.ok || problems.length ? "bad" : st.dof === 0 && s.sketch.entities.length ? "ok" : ""}`} title={t("Blue: free to move · black: fully defined · red: conflicting or redundant constraints")}>
         {statusText}
       </span>
       {problems.map((id) => {
         const c = s.sketch.constraints.find((item) => item.id === id);
-        return c && <button type="button" class="ws-sketch-conflict" key={id} title="Select this conflicting or redundant constraint, then press Delete" onClick={() => patchConflictSelection(id)}>{c.type} ({id})</button>;
+        return c && <button type="button" class="ws-sketch-conflict" key={id} title={t("Select this conflicting or redundant constraint, then press Delete")} onClick={() => patchConflictSelection(id)}>{t(CONSTRAINT_NAME[c.type])} ({id})</button>;
       })}
       {preview.value.hint && <small class="ws-sketch-hint">{preview.value.hint}</small>}
     </div>
@@ -150,6 +178,19 @@ function patchConflictSelection(id: string): void {
   if (s) session.value = { ...s, selected: new Set([id]), tool: "select" };
 }
 
+/** A scaled sketch keeps its own dimensions; say what size it will cut at. */
+function ScaleNote({ mat }: { mat: readonly number[] }) {
+  const pct = (v: number) => Math.round(v * 10000) / 100;
+  const sx = pct(Math.hypot(mat[0]!, mat[1]!));
+  const sy = pct(Math.hypot(mat[2]!, mat[3]!));
+  if (Math.abs(sx - 100) < 0.01 && Math.abs(sy - 100) < 0.01) return null;
+  return (
+    <span class="ws-sketch-scaled" title={t("The dimensions here are the sketch's own. It is placed at this scale and cuts at it; change the scale in Position & size.")}>
+      {t("Scaled {scale}", { scale: sx === sy ? `${sx} %` : `${sx} × ${sy} %` })}
+    </span>
+  );
+}
+
 /** Count fields for the polygon and pattern tools. */
 function ToolOptions({ tool }: { tool: Tool }) {
   const o = toolOptions.value;
@@ -157,15 +198,15 @@ function ToolOptions({ tool }: { tool: Tool }) {
   const field = (label: string, value: number, min: number, onCommit: (v: number) => void) => (
     <NumberInput class="ws-sketch-count" value={value} label={label} step={1} min={min} max={100} decimals={0} onCommit={(v) => onCommit(Math.round(v))} onInvalid={(m) => notify(m, "error")} />
   );
-  if (tool === "polygon") return <span class="ws-sketch-opts">Sides {field("Number of sides", o.sides, 3, (v) => set({ sides: v }))}</span>;
+  if (tool === "polygon") return <span class="ws-sketch-opts">{t("Sides")} {field(t("Number of sides"), o.sides, 3, (v) => set({ sides: v }))}</span>;
   if (tool === "linearPattern")
     return (
       <span class="ws-sketch-opts">
-        Copies {field("Copies in the first direction (the original included)", o.count1, 1, (v) => set({ count1: v }))} ×{" "}
-        {field("Copies in the second direction (1 for a single row)", o.count2, 1, (v) => set({ count2: v }))}
+        {t("Copies")} {field(t("Copies in the first direction (the original included)"), o.count1, 1, (v) => set({ count1: v }))} ×{" "}
+        {field(t("Copies in the second direction (1 for a single row)"), o.count2, 1, (v) => set({ count2: v }))}
       </span>
     );
-  if (tool === "circularPattern") return <span class="ws-sketch-opts">Copies {field("Copies around the circle (the original included)", o.countC, 2, (v) => set({ countC: v }))}</span>;
+  if (tool === "circularPattern") return <span class="ws-sketch-opts">{t("Copies")} {field(t("Copies around the circle (the original included)"), o.countC, 2, (v) => set({ countC: v }))}</span>;
   return null;
 }
 
@@ -199,19 +240,19 @@ export function TextEditor() {
         ev.stopPropagation();
       }}
     >
-      <input ref={ref} class="ws-text-words" value={e.text} aria-label="Text" onInput={(ev) => updateText({ text: (ev.target as HTMLInputElement).value })} />
-      <label title="Cap height (mm)">
-        H <NumberInput value={e.size} label="Text height in mm (capital letters)" min={0.1} max={1000} onCommit={(v) => updateText({ size: v })} onInvalid={(m) => notify(m, "error")} />
+      <input ref={ref} class="ws-text-words" value={e.text} aria-label={t("Text")} onInput={(ev) => updateText({ text: (ev.target as HTMLInputElement).value })} />
+      <label title={t("Cap height (mm)")}>
+        H <NumberInput value={e.size} label={t("Text height in mm (capital letters)")} min={0.1} max={1000} onCommit={(v) => updateText({ size: v })} onInvalid={(m) => notify(m, "error")} />
       </label>
-      <label title="Angle (degrees, counter-clockwise)">
-        ∠ <NumberInput value={e.angle} label="Text angle in degrees" min={-360} max={360} onCommit={(v) => updateText({ angle: v })} onInvalid={(m) => notify(m, "error")} />
+      <label title={t("Angle (degrees, counter-clockwise)")}>
+        ∠ <NumberInput value={e.angle} label={t("Text angle in degrees")} min={-360} max={360} onCommit={(v) => updateText({ angle: v })} onInvalid={(m) => notify(m, "error")} />
       </label>
       <select
         value={e.font}
-        aria-label="Font"
+        aria-label={t("Font")}
         onChange={(ev) => {
           const v = (ev.target as HTMLSelectElement).value;
-          if (v === MORE_FONTS) void localFontFamilies().then((f) => (f.length ? setFamilies(f) : notify("This browser can't list the computer's fonts (Chrome can, with permission).", "warn")));
+          if (v === MORE_FONTS) void localFontFamilies().then((f) => (f.length ? setFamilies(f) : notify(t("This browser can't list the computer's fonts (Chrome can, with permission)."), "warn")));
           else updateText({ font: v });
         }}
       >
@@ -220,9 +261,9 @@ export function TextEditor() {
             {f}
           </option>
         ))}
-        {!families && canListLocalFonts() && <option value={MORE_FONTS}>More fonts on this computer…</option>}
+        {!families && canListLocalFonts() && <option value={MORE_FONTS}>{t("More fonts on this computer…")}</option>}
       </select>
-      <IconButton icon={Check} label="Done (Enter)" onClick={() => closeTextEditor(true)} />
+      <IconButton icon={Check} label={t("Done (Enter)")} onClick={() => closeTextEditor(true)} />
     </div>
   );
 }
@@ -257,18 +298,18 @@ export function DimensionEditor() {
   const sign = c.type === "distanceX" || c.type === "distanceY" ? Math.sign(c.value) || 1 : 1;
   const apply = (v: number) => {
     if ((c.type === "radius" || c.type === "diameter" || c.type.startsWith("distance") || c.type === "pointLineDistance") && v <= 0) {
-      notify("A size must be greater than 0.", "error");
+      notify(t("A size must be greater than 0."), "error");
       return;
     }
     if (suggestion && proposed) {
       if (!dimensionCanDrive(s.sketch, proposed)) {
-        notify("This dimension is already constrained and cannot be changed.", "warn");
+        notify(t("This dimension is already constrained and cannot be changed."), "warn");
         return;
       }
       const next = addConstraint(s.sketch, { ...proposed, value: v * sign }).s;
       const result = solve(next);
       if (!result.ok) {
-        notify("That dimension conflicts with existing constraints.", "warn");
+        notify(t("That dimension conflicts with existing constraints."), "warn");
         return;
       }
       setSketch(next);
@@ -299,7 +340,7 @@ export function DimensionEditor() {
         if (editingSuggestion.value === suggestion) editingSuggestion.value = null;
       }, 0)}
     >
-      <NumberInput key={id ?? `suggestion-${suggestion?.index}`} value={Math.abs(c.value)} initialText={suggestion?.initial} commitOnEnter commitOnBlur={!suggestion} label="Dimension value" onCommit={apply} onInvalid={(m) => notify(m, "error")} />
+      <NumberInput key={id ?? `suggestion-${suggestion?.index}`} value={Math.abs(c.value)} initialText={suggestion?.initial} commitOnEnter commitOnBlur={!suggestion} label={t("Dimension value")} onCommit={apply} onInvalid={(m) => notify(m, "error")} />
     </div>
   );
 }
