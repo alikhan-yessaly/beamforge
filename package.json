@@ -1,0 +1,40 @@
+{
+  "name": "beamforge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "decode": "tsx scripts/decode-rd.ts",
+    "decode-trace": "tsx scripts/decode-trace.ts",
+    "bridge": "tsx scripts/serial-bridge.ts",
+    "ruida": "tsx scripts/ruida.ts",
+    "extract-job": "tsx scripts/extract-job.ts"
+  },
+  "license": "MIT",
+  "description": "Browser-based job sender for Ruida laser controllers (Web Serial)",
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/opentype.js": "^1.3.10",
+    "@types/w3c-web-serial": "^1.0.8",
+    "@types/ws": "^8.18.1",
+    "serialport": "^13.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^6.4.5",
+    "vitest": "^4.1.12",
+    "ws": "^8.22.2"
+  },
+  "dependencies": {
+    "@fontsource/roboto": "^5.2.6",
+    "@preact/signals": "^2.11.4",
+    "@salusoft89/planegcs": "1.3.0",
+    "clipper-lib": "6.4.2",
+    "lucide-preact": "1.62.0",
+    "opentype.js": "^1.3.4",
+    "preact": "^11.2.0"
+  }
+}

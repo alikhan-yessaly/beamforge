@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BeamForge Beta</title>
+    <link rel="stylesheet" href="/src/ui/style.css" />
+  </head>
+  <body>
+    <div id="workspace"></div>
+    <main id="machine-content">
+      <p class="warn small">Never leave a running laser unattended. Software controls do not replace the machine's interlocks or physical E-stop.</p>
+      <section id="connection-panel" class="dev-only">
+        <h2>Connection</h2>
+        <label>
+          Controller model
+          <select id="model"></select>
+        </label>
+        <p class="warn small">
+          A wrong model sends the controller garbage commands. Pick your model, then read the Card ID.
+          Nothing else is sent until the Card ID reply decodes.
+        </p>
+        <div class="row">
+          <label>
+            Connection
+            <select id="conn-kind">
+              <option value="usb">USB (Web Serial)</option>
+              <option value="sim">Simulator (no hardware)</option>
+              <option value="bridge">Dev bridge (npm run bridge)</option>
+            </select>
+          </label>
+        </div>
+        <div class="row" id="usb-row">
+          <label>
+            Ports
+            <select id="port-filter">
+              <option value="ftdi">FTDI only (default)</option>
+              <option value="ft245r">FT245R only (0403:6001)</option>
+              <option value="all">Show all ports</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <button id="connect" title="Reuses the port you picked before; shows the chooser the first time">Connect</button>
+          <button id="choose-port" title="Always show the browser's port chooser">Choose port…</button>
+          <button id="disconnect" disabled>Disconnect</button>
+          <span id="state" class="state">Disconnected</span>
+        </div>
+        <div class="row">
+          <button id="q-card" disabled>Read Card ID</button>
+          <button id="q-status" disabled>Read status</button>
+        </div>
+        <pre id="result" class="result"></pre>
+      </section>
+
+      <div id="machine-panel-root"></div>
+
+      <details class="diagnostics dev-only">
+        <summary>Diagnostics and advanced tools</summary>
+      <div id="diagnostics-machine"></div>
+      <section>
+        <h2>Raw bytes</h2>
+        <label><input type="checkbox" id="dev" /> Allow raw bytes, including memory writes, with no Card ID gate (can change machine settings)</label>
+        <div id="dev-panel" hidden>
+          <p class="warn small">Can change machine settings. For protocol debugging only.</p>
+          <div class="row">
+            <input id="hex" placeholder="unswizzled hex, e.g. DA 00 05 7E" size="40" />
+            <button id="send-hex" disabled>Send</button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Traffic log</h2>
+        <div class="row">
+          <button id="log-download">Download</button>
+          <button id="log-clear">Clear</button>
+        </div>
+        <pre id="log" class="log"></pre>
+      </section>
+      </details>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/workspace/main.tsx"></script>
+  </body>
+</html>
