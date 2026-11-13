@@ -10,7 +10,6 @@ import {
   BookmarkPlus,
   Check,
   CopyPlus,
-  FileUp,
   FlipHorizontal2,
   FlipVertical2,
   Group,
@@ -41,7 +40,9 @@ import { IconButton, IconToggle } from "../ui/icons";
 import { type Anchor, type MachineProfile, type OriginCorner, fromUser, toUser, anchorPoint } from "../scene/model";
 import { type AlignMode, align, objectScale, selectionBox, setObjectScale, setSelectionBox } from "../scene/ops";
 import { canRedo, canUndo, commit, cursor, doc, messages, notify, prefs, profile, selBox, selection } from "../scene/store";
-import { actions, importFiles } from "./actions";
+import { IMPORT_ACCEPT, actions, importFiles } from "./actions";
+import { ExportDesign, ImportDesign } from "../ui/customIcons";
+import { openExport } from "./ExportDialog";
 import { PreviewBar } from "./LayersPanel";
 import { formatUser } from "./render";
 import { contextMenu } from "./ContextMenu";
@@ -216,7 +217,7 @@ export function ObjectsPanel() {
             </button>
           </li>
         ))}
-        {d.objects.length === 0 && <li class="ws-empty">{t("Import a DXF or drop one on the canvas")}</li>}
+        {d.objects.length === 0 && <li class="ws-empty">{t("Import a drawing or picture, or drop one on the canvas")}</li>}
       </ul>
     </details>
   );
@@ -332,12 +333,13 @@ export function Toolbar() {
   return (
     <div class="ws-toolbar">
       <ProjectButtons />
-      <IconButton icon={FileUp} label={t("Import DXF…")} onClick={() => fileRef.current?.click()} />
+      <IconButton icon={ImportDesign} label={t("Import… DXF, SVG, PDF, AI, PLT, CDR or a picture (PNG, JPEG, HEIC…)")} onClick={() => fileRef.current?.click()} />
+      <IconButton icon={ExportDesign} label={t("Export… the selection or everything as SVG, DXF, PDF or PNG (⌘E)")} disabled={doc.value.objects.length === 0} onClick={openExport} />
       <IconButton icon={PenTool} label={t("New sketch: draw lines, arcs, circles with dimensions and constraints")} onClick={() => void newSketch()} />
       <input
         ref={fileRef}
         type="file"
-        accept=".dxf"
+        accept={IMPORT_ACCEPT}
         multiple
         hidden
         onChange={(e) => {

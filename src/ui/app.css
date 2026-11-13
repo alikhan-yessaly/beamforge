@@ -393,3 +393,28 @@ body > #workspace { height: 100%; border: 0; }
 .ws-machine-files li.ws-taken { color: var(--ws-out); font-weight: 600; }
 .ws-machine-files li > span { display: inline-block; min-width: 9rem; }
 .ws-machine-files li button { padding: .05rem; vertical-align: middle; }
+
+/* Import and export dialogs (src/workspace/ImportDialog.tsx, ExportDialog.tsx) */
+.ws-import-dialog { width: min(920px, 94vw); }
+.ws-export-dialog { width: min(420px, 94vw); }
+.ws-import-preview { width: 100%; height: 300px; display: block; border: 1px solid var(--ui-border); border-radius: 6px; background: #fff; }
+.ws-import-raster { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 1rem; align-items: start; }
+.ws-import-raster .ws-import-preview { height: 420px; }
+.ws-import-opts { display: flex; flex-direction: column; gap: .1rem; }
+.ws-import-opts fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .1rem; }
+.ws-import-opts fieldset:disabled { opacity: .5; }
+.ws-dialog .ws-import-opts label > span:first-child { display: flex; justify-content: space-between; gap: .5rem; }
+.ws-dialog label.ws-check, .ws-dialog .ws-check { flex-direction: row; align-items: center; gap: .35rem; }
+.ws-import-opts input[type="number"] { width: 6rem; }
+.ws-import-opts .ws-segmented button { border: 1px solid var(--ui-border); background: #fff; padding: .25rem .6rem; font: inherit; font-size: .85rem; cursor: pointer; }
+.ws-import-opts .ws-segmented button:first-child { border-radius: 6px 0 0 6px; }
+.ws-import-opts .ws-segmented button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.ws-import-opts .ws-segmented button.active { background: var(--ws-select); border-color: var(--ws-select); color: #fff; }
+.ws-import-colors { width: 100%; border-collapse: collapse; margin: .6rem 0 .2rem; font-size: .85rem; }
+.ws-import-colors th { text-align: left; font-weight: 600; color: var(--ws-text); padding: .2rem .3rem; border-bottom: 1px solid var(--ui-border); }
+.ws-import-colors td { padding: .2rem .3rem; }
+.ws-import-colors code { color: var(--ws-text); font-size: .75rem; }
+.ws-swatch { display: inline-block; width: .85rem; height: .85rem; border-radius: 3px; border: 1px solid rgba(0,0,0,.2); vertical-align: -2px; margin-right: .25rem; }
+.ws-primary-btn { background: var(--ws-select); border-color: var(--ws-select); color: #fff; }
+.ws-primary-btn:disabled { opacity: .5; }
+@media (max-width: 760px) { .ws-import-raster { grid-template-columns: 1fr; } }

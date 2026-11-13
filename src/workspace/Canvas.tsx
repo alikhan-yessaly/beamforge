@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { type Box, type Vec, apply, distToSegment, translate } from "../geom/geom";
+import { type Box, type Vec, apply, distToSegment, invert, translate } from "../geom/geom";
 import { appMode } from "./mode";
 import type { Doc } from "../scene/model";
 import { boxCenter, objectBox, rotateAbout, scaleAbout, transformSelected } from "../scene/ops";
@@ -20,7 +20,7 @@ import { headUm, relativePlacement, StartFromControl } from "./RunPanel";
 import { relativeHeadOnDrawing } from "./placement";
 import { bedLoad } from "../app/connection";
 import { contextMenu } from "./ContextMenu";
-import { HANDLE, HANDLES, ROTATE_OFFSET, draw, selectionScreenRect } from "./render";
+import { HANDLE, HANDLES, ROTATE_OFFSET, draw, imagesVersion, selectionScreenRect } from "./render";
 import { type View, canvasSize, fitBed, toBed, view, viewTouched, zoomAt } from "./view";
 
 type Drag =
@@ -37,6 +37,11 @@ function hitObject(d: Doc, v: View, p: Vec): string | null {
     const o = d.objects[i]!;
     const b = objectBox(o);
     if (p.x < b.minX - tol || p.x > b.maxX + tol || p.y < b.minY - tol || p.y > b.maxY + tol) continue;
+    if (o.image) {
+      // Pictures are picked anywhere inside them, not just on an outline.
+      const q = apply(invert(o.mat), p);
+      if (q.x >= 0 && q.y >= 0 && q.x <= o.image.w && q.y <= o.image.h) return o.id;
+    }
     for (const path of o.paths) {
       const pts = path.points.map((q) => apply(o.mat, q));
       const n = path.closed ? pts.length : pts.length - 1;
@@ -88,6 +93,7 @@ export function Canvas() {
   const skPreview = sketchPreview.value;
   const skSuggestions = dimensionSuggestions.value;
   void fontsVersion.value; // redraw sketch text once its font has loaded
+  void imagesVersion.value; // and imported pictures once decoded
   void lang.value; // canvas labels follow the interface language
   const ft = fillTool.value;
   void fillHover.value;

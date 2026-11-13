@@ -163,3 +163,27 @@ export const CnSymmetric = createLucideIcon("cn-symmetric", [
   ["circle", { cx: "6", cy: "12", r: "2.2", key: "a" }],
   ["circle", { cx: "18", cy: "12", r: "2.2", key: "b" }],
 ]);
+
+/** Import into the workspace: an arrow dropping a design into the bed frame. */
+export const ImportDesign = createLucideIcon("import-design", [
+  ["path", { d: "M3 11v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8", key: "bed" }],
+  ["path", { d: "M12 2v11", key: "shaft" }],
+  ["path", { d: "m8 9 4 4 4-4", key: "head" }],
+  ["path", { d: "M7 17h3M14 17h3", key: "design" }],
+]);
+
+/** Export from the workspace: an arrow lifting the design out of the bed frame. */
+export const ExportDesign = createLucideIcon("export-design", [
+  ["path", { d: "M3 11v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8", key: "bed" }],
+  ["path", { d: "M12 14V3", key: "shaft" }],
+  ["path", { d: "m8 7 4-4 4 4", key: "head" }],
+  ["path", { d: "M7 17h3M14 17h3", key: "design" }],
+]);
+
+/** Save As: the floppy disk with a pencil writing a new copy. */
+export const SaveAs = createLucideIcon("save-as", [
+  ["path", { d: "M12 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v3", key: "disk" }],
+  ["path", { d: "M7 3v4h7", key: "shutter" }],
+  ["path", { d: "M7 21v-6h4", key: "label" }],
+  ["path", { d: "M20.4 13.6a1.8 1.8 0 0 1 2.6 2.6L18 21.2l-3 .8.8-3z", key: "pencil" }],
+]);

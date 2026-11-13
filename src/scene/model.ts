@@ -32,6 +32,19 @@ export interface SceneObject {
   children?: SceneObject[];
   /** Editable sketch; `paths` are generated from it (src/sketch/paths.ts). Local coords = sketch coords. */
   sketch?: Sketch;
+  /**
+   * An imported picture shown on the canvas, covering local (0,0)–(w,h) mm. Not sent to the machine: raster
+   * engraving (Ruida scan mode) isn't supported yet, so it serves as a reference for tracing and placement.
+   */
+  image?: SceneImage;
+}
+
+export interface SceneImage {
+  /** data: URL (PNG or JPEG). */
+  src: string;
+  /** Size in local mm. */
+  w: number;
+  h: number;
 }
 
 /** Cut settings for every path of one colour (LightBurn's "Cuts / Layers"). The array order in `Doc.layers` is the cut order. */

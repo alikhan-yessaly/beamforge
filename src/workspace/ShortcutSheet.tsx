@@ -12,7 +12,7 @@ const S = mac ? "⇧" : "Shift+";
 const JOG = mac ? "⌃⌥ + ↑↓←→" : "Ctrl+Alt + ↑↓←→";
 
 const GROUPS: [string, [string, string][]][] = [
-  [msg("Project"), [[`${M}O`, msg("Open a project")], [`${M}S`, msg("Save")], [`${S}${M}S`, msg("Save As")]]],
+  [msg("Project"), [[`${M}O`, msg("Open a project")], [`${M}S`, msg("Save")], [`${S}${M}S`, msg("Save As")], [`${M}E`, msg("Export the selection or everything")]]],
   [
     msg("Edit"),
     [

@@ -29,8 +29,12 @@ simulator works without a machine.
 
 ## What it does
 
-- **Design:** import DXF drawings or create parametric sketches (dimensions, constraints, fillets, patterns,
-  text). Imported DXF files can also be edited as sketches.
+- **Design:** import DXF, SVG, PDF, Illustrator (AI), PLT/HPGL and CorelDRAW (preview) files, or create
+  parametric sketches (dimensions, constraints, fillets, patterns, text). Imported DXF files can also be edited
+  as sketches.
+- **Pictures:** trace PNG, JPEG, iPhone HEIC, BMP, GIF, WebP and AVIF pictures into vector shapes, in black and
+  white or in colours, with a live preview. Each colour goes on its own layer.
+- **Export:** the selection or the whole drawing as SVG, DXF, PDF or PNG.
 - **Layers:** each colour is a layer that either cuts outlines or fills (engraves) areas, with its own speed,
   power and passes. The Fill tool engraves any closed area in a colour of its own.
 - **Job planning:** fills always run before the cuts around them. Jobs run object by object, layer by layer, or
@@ -61,6 +65,21 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
 - Import DXF files, or drop them on the canvas. Supported entities: LINE, LWPOLYLINE (with arcs), POLYLINE, ARC,
   CIRCLE, ELLIPSE, SPLINE, INSERT/blocks and SOLID. Text, hatches and dimensions are skipped with a warning.
   Units come from `$INSUNITS`; drawings without units are read as millimetres.
+- SVG/SVGZ, PDF, AI (saved with PDF compatibility) and PLT/HPGL open an import dialog. It lists each outline and
+  fill colour in the file with the layer colour it maps to (the nearest palette colour); change, merge or skip
+  any of them. Filled shapes can be engraved, cut along their outline, or ignored. You can also set the scale and,
+  for PDFs, the page. Text and embedded pictures are skipped with a warning (convert text to outlines first).
+- CorelDRAW (`.cdr`) files are imported on a best-effort basis: the preview picture stored in the file is traced.
+  For the real vectors, export SVG or PDF from CorelDRAW.
+- Pictures open a tracing dialog with a live preview:
+  - Black & white: threshold (or automatic), brightness, contrast, blur and invert.
+  - Colours: 2 to 8 colours, each on its own layer; the white background can be left out.
+  - Despeckle, corner smoothing, detail level, the width in millimetres, and whether traced shapes are engraved
+    or cut.
+  - The picture can stay on the canvas as a reference. It is never sent to the machine.
+- **Export** (⌘E or right-click → Export…) writes the selection or everything as SVG (one Inkscape layer per
+  colour), DXF, PDF (one layer per colour) or PNG (96–1000 DPI, optionally with a transparent background and the
+  pictures). It can keep the position on the bed, with the page set to the bed size.
 - **Sketch mode** is a small parametric CAD editor:
   - Drawing tools: line, rectangle, circle, arc, slot, polygon, spline, point and text.
   - Modify tools: trim, fillet, chamfer, offset, mirror, and linear, grid and circular patterns.
@@ -185,6 +204,8 @@ src/transport/   Web Serial, simulator, WebSocket bridge, traffic log
 src/job/         Planning: layers, fill paths, cut order, time estimate, doc → job
 src/sketch/      Parametric sketch model, constraint solver (planegcs), modify tools, text
 src/dxf/         DXF parser
+src/import/      SVG, PDF, HPGL and CDR readers, picture decoding and tracing (Potrace port)
+src/export/      SVG, DXF and PDF writers
 src/workspace/   The Preact interface
 scripts/         CLI, dev bridge, .rd decoder
 tests/           Unit tests (Vitest), including byte-for-byte checks against LightBurn jobs

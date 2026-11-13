@@ -1,9 +1,18 @@
-import { t, tp } from "../i18n";
+import { msg, t, tp } from "../i18n";
 import { translate } from "../geom/geom";
 import { appMode, enterPrepare } from "./mode";
 import { signal } from "@preact/signals";
 import type { SceneObject } from "../scene/model";
 import { importDxf } from "../scene/importDxf";
+import { parseSvg } from "../import/svg";
+import { parseHpgl } from "../import/hpgl";
+import { looksLikePdf, openPdf } from "../import/pdf";
+import { cdrPreview } from "../import/cdr";
+import { decodeImage } from "../import/raster";
+import { type ImportOutcome, askRasterImport, askVectorImport } from "./ImportDialog";
+import { openExport } from "./ExportDialog";
+import { NEW_FILL_LAYER, updateLayer } from "../job/layers";
+import type { Doc } from "../scene/model";
 import {
   centerOnBed,
   duplicateSelected,
@@ -29,21 +38,80 @@ import { assignMode, visibleDocument } from "../job/layers";
 import type { LayerMode } from "../scene/model";
 import { fillTool, stopFillTool, toggleFillTool } from "./fillTool";
 
+/** File types Import accepts (the file picker's filter). */
+export const IMPORT_ACCEPT = ".dxf,.svg,.svgz,.pdf,.ai,.plt,.hpgl,.hgl,.cdr,.png,.jpg,.jpeg,.bmp,.gif,.webp,.avif,.heic,.heif";
+
+const RASTER = /\.(png|jpe?g|bmp|gif|webp|avif|heic|heif)$/i;
+
+/** Add what an import produced: objects (selected afterwards) and the fill layers it needs. */
+function addImported(file: string, out: ImportOutcome): void {
+  out.warnings.forEach((w) => notify(t("{file}: {message}", { file, message: t(w) }), "warn"));
+  if (!out.objects.length) return;
+  let next: Doc = { ...doc.value, objects: [...doc.value.objects, ...out.objects] };
+  for (const color of out.fillLayers) {
+    const stored = (next.layers ?? []).find((l) => l.color === color);
+    if (!stored || (stored.mode ?? "cut") === "cut") next = updateLayer(next, color, stored ? { mode: "fill", fill: stored.fill ?? NEW_FILL_LAYER.fill } : NEW_FILL_LAYER);
+  }
+  commit(next);
+  selection.value = new Set(out.objects.map((o) => o.id));
+  const paths = out.objects.reduce((n, o) => n + o.paths.length, 0);
+  notify(tp(["Imported {file} ({n} path)", "Imported {file} ({n} paths)"], paths, { file }));
+}
+
+async function importOne(f: File): Promise<void> {
+  const name = f.name.replace(/\.[^.]+$/, "");
+  const lower = f.name.toLowerCase();
+  if (lower.endsWith(".dxf")) {
+    const { object, warnings } = importDxf(await f.text(), name, profile.value);
+    addImported(f.name, { objects: object ? [object] : [], fillLayers: [], warnings });
+    return;
+  }
+  if (lower.endsWith(".eps") || lower.endsWith(".ps")) throw new Error(t("EPS/PostScript can't be read in the browser: save the drawing as PDF or SVG and import that."));
+  if (lower.endsWith(".svg") || lower.endsWith(".svgz")) {
+    let text: string;
+    if (lower.endsWith(".svgz")) {
+      const stream = f.stream().pipeThrough(new DecompressionStream("gzip"));
+      text = await new Response(stream).text();
+    } else text = await f.text();
+    const out = await askVectorImport(name, parseSvg(text));
+    if (out) addImported(f.name, out);
+    return;
+  }
+  if (/\.(plt|hpgl|hgl)$/.test(lower)) {
+    const out = await askVectorImport(name, parseHpgl(await f.text()));
+    if (out) addImported(f.name, out);
+    return;
+  }
+  if (lower.endsWith(".pdf") || lower.endsWith(".ai")) {
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    if (!looksLikePdf(bytes)) throw new Error(t("This Illustrator file has no PDF inside: in Illustrator, save it with “Create PDF Compatible File” on, or save as PDF or SVG."));
+    const pdf = await openPdf(bytes);
+    const out = await askVectorImport(name, await pdf.read(1), pdf);
+    if (out) addImported(f.name, out);
+    return;
+  }
+  if (lower.endsWith(".cdr")) {
+    const preview = await cdrPreview(new Uint8Array(await f.arrayBuffer()));
+    const img = await decodeImage(preview.image, f.name);
+    const out = await askRasterImport(name, img, msg("CorelDRAW files are closed: this is the preview picture saved inside the file, traced. For exact vectors, export SVG or PDF from CorelDRAW."));
+    if (out) addImported(f.name, out);
+    return;
+  }
+  if (RASTER.test(lower) || f.type.startsWith("image/")) {
+    const img = await decodeImage(f, f.name);
+    const out = await askRasterImport(name, img);
+    if (out) addImported(f.name, out);
+    return;
+  }
+  throw new Error(t("This file type isn't supported. Import DXF, SVG, PDF, AI, PLT/HPGL, CDR, or a picture (PNG, JPEG, HEIC, BMP, GIF, WebP)."));
+}
+
 export async function importFiles(files: Iterable<File>): Promise<void> {
   for (const f of files) {
-    if (!/\.dxf$/i.test(f.name)) {
-      notify(t("{file}: only .dxf is supported for now", { file: f.name }), "warn");
-      continue;
-    }
     try {
-      const { object, warnings } = importDxf(await f.text(), f.name.replace(/\.dxf$/i, ""), profile.value);
-      warnings.forEach((w) => notify(t("{file}: {message}", { file: f.name, message: w }), "warn"));
-      if (!object) continue;
-      commit({ ...doc.value, objects: [...doc.value.objects, object] });
-      selection.value = new Set([object.id]);
-      notify(tp(["Imported {file} ({n} path)", "Imported {file} ({n} paths)"], object.paths.length, { file: f.name }));
+      await importOne(f);
     } catch (e) {
-      notify(t("{file}: {message}", { file: f.name, message: e instanceof Error ? e.message : String(e) }), "error");
+      notify(t("{file}: {message}", { file: f.name, message: t(e instanceof Error ? e.message : String(e)) }), "error");
     }
   }
 }
@@ -124,6 +192,11 @@ const isTyping = (t: EventTarget | null) =>
 export function handleKey(e: KeyboardEvent): void {
   const mod = e.metaKey || e.ctrlKey;
   // Project shortcuts work even while a field has focus.
+  if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "e" && !sketchSession.value) {
+    e.preventDefault();
+    if (doc.value.objects.length) openExport();
+    return;
+  }
   if (mod && !e.altKey && (e.key.toLowerCase() === "s" || e.key.toLowerCase() === "o")) {
     e.preventDefault();
     if (e.key.toLowerCase() === "o") {

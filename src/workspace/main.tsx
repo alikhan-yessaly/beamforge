@@ -23,6 +23,8 @@ import { StartDialog } from "./StartDialog";
 import { SketchToolbar } from "./sketch/SketchToolbar";
 import { session as sketchSession } from "./sketch/state";
 import { ShortcutSheet } from "./ShortcutSheet";
+import { ImportDialog } from "./ImportDialog";
+import { ExportDialog } from "./ExportDialog";
 import { DevicePanel, ModeSwitch, PrepareBar } from "./DevicePanel";
 import { appMode } from "./mode";
 
@@ -105,6 +107,8 @@ function App() {
       <Toasts />
       <ContextMenu />
       <StartDialog />
+      <ImportDialog />
+      <ExportDialog />
       <ShortcutSheet />
     </div>
   );

@@ -42,7 +42,7 @@ export function visibleDocument(doc: Doc): Doc {
           .map((p): ScenePath => (p.fill && hidden.has(p.fill) ? withFill(p, null) : p))
           .filter((p) => !hidden.has(p.color) || p.fill),
       }))
-      .filter((o) => o.paths.length > 0),
+      .filter((o) => o.paths.length > 0 || !!o.image),
   };
 }
 

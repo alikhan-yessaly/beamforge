@@ -59,6 +59,12 @@ function checkObject(o: unknown, depth = 0): SceneObject {
     throw new ProjectError(t("Invalid object"));
   }
   o.paths.forEach((p) => checkPath(p, t("object \"{name}\"", { name: String(o.name) })));
+  if (o.image !== undefined) {
+    const im = o.image;
+    if (!isObj(im) || !isStr(im.src) || !im.src.startsWith("data:image/") || !isNum(im.w) || !isNum(im.h) || !(im.w > 0) || !(im.h > 0)) {
+      throw new ProjectError(t("Invalid image in object \"{name}\"", { name: String(o.name) }));
+    }
+  }
   if (o.children !== undefined) {
     if (!Array.isArray(o.children)) throw new ProjectError(t("Invalid group \"{name}\"", { name: String(o.name) }));
     o.children.forEach((c) => checkObject(c, depth + 1));

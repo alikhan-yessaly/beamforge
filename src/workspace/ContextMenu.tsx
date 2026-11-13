@@ -1,3 +1,5 @@
+import { ExportDesign } from "../ui/customIcons";
+import { openExport } from "./ExportDialog";
 import { t } from "../i18n";
 import { signal } from "@preact/signals";
 import { ModeCut, ModeFill } from "../ui/customIcons";
@@ -46,6 +48,7 @@ export function ContextMenu() {
     { icon: ClipboardPaste, label: t("Paste"), shortcut: "⌘/Ctrl V", enabled: clipboard.value.length > 0, action: actions.paste },
     { icon: CopyPlus, label: t("Duplicate"), shortcut: "⌘/Ctrl D", enabled: selected.length > 0, action: actions.duplicate },
     { icon: Trash2, label: t("Delete"), shortcut: "Del", enabled: selected.length > 0, action: actions.delete },
+    { icon: ExportDesign, label: t("Export…"), shortcut: "⌘/Ctrl E", enabled: selected.length > 0, action: openExport },
     { icon: ModeCut, label: t("Cut (outline)"), shortcut: "", enabled: selected.length > 0, action: () => actions.setMode("cut") },
     { icon: ModeFill, label: t("Fill (engrave inside)"), shortcut: "", enabled: selected.length > 0, action: () => actions.setMode("fill") },
     { icon: Group, label: t("Group"), shortcut: "⌘/Ctrl G", enabled: selected.length > 1, action: actions.group },

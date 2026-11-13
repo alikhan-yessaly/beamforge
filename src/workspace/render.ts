@@ -7,6 +7,21 @@ import { activeLayers } from "../job/layers";
 import { regionRings } from "../job/regions";
 import { t } from "../i18n";
 import { type View, toScreen } from "./view";
+import { signal } from "@preact/signals";
+
+/** Bumped when an imported picture finishes decoding, so the canvas redraws with it. */
+export const imagesVersion = signal(0);
+const images = new Map<string, HTMLImageElement>();
+function imageFor(src: string): HTMLImageElement | null {
+  let im = images.get(src);
+  if (!im) {
+    im = new Image();
+    im.onload = () => imagesVersion.value++;
+    im.src = src;
+    images.set(src, im);
+  }
+  return im.complete && im.naturalWidth > 0 ? im : null;
+}
 
 export interface Overlay {
   selection: ReadonlySet<string>;
@@ -155,6 +170,27 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: n
     const selected = ov.selection.has(obj.id);
     const ob = objectBox(obj);
     const outside = ob.minX < -1e-6 || ob.minY < -1e-6 || ob.maxX > p.bedW + 1e-6 || ob.maxY > p.bedH + 1e-6;
+    if (obj.image) {
+      const im = imageFor(obj.image.src);
+      if (im) {
+        ctx.save();
+        ctx.setTransform(dpr * m[0], dpr * m[1], dpr * m[2], dpr * m[3], dpr * m[4], dpr * m[5]);
+        ctx.globalAlpha = (ov.preview ? 0.25 : 0.85) * (ov.dimObjects ? 0.3 : 1);
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(im, 0, 0, obj.image.w, obj.image.h);
+        ctx.restore();
+      }
+      if (selected || ov.hover === obj.id) {
+        const fr = [{ x: 0, y: 0 }, { x: obj.image.w, y: 0 }, { x: obj.image.w, y: obj.image.h }, { x: 0, y: obj.image.h }];
+        ctx.beginPath();
+        traceRing(ctx, m, fr);
+        ctx.strokeStyle = colors.sel;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
     // Batch paths by colour.
     const byColor = new Map<string, typeof obj.paths>();
     for (const path of obj.paths) {

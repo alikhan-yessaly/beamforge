@@ -17,10 +17,13 @@ import { type Anchor, type Doc, type MachineProfile, type SceneObject, anchorPoi
 const boxCache = new WeakMap<SceneObject, Box>();
 
 /** World-space (bed mm) bounding box of an object; cached per object instance. */
+/** An image's outline in local mm, for its box and hit testing. */
+export const imageFrame = (im: { w: number; h: number }) => ({ closed: true, points: [{ x: 0, y: 0 }, { x: im.w, y: 0 }, { x: im.w, y: im.h }, { x: 0, y: im.h }] });
+
 export function objectBox(o: SceneObject): Box {
   let b = boxCache.get(o);
   if (!b) {
-    b = pathsBox(o.paths, o.mat);
+    b = pathsBox(o.image ? [...o.paths, imageFrame(o.image)] : o.paths, o.mat);
     boxCache.set(o, b);
   }
   return b;
@@ -133,8 +136,10 @@ export function pasteObjects(doc: Doc, objects: readonly SceneObject[], dx = 5, 
 
 /** Combine selected objects while retaining their hierarchy and baked paths for rendering and jobs. */
 export function groupSelected(doc: Doc, ids: ReadonlySet<string>): { doc: Doc; ids: Set<string> } {
-  const sel = doc.objects.filter((o) => ids.has(o.id));
+  // Pictures stay separate objects: a group is drawn from its baked paths, which a picture doesn't have.
+  const sel = doc.objects.filter((o) => ids.has(o.id) && !o.image);
   if (sel.length < 2) return { doc, ids: new Set(ids) };
+  ids = new Set(sel.map((o) => o.id));
   const paths = sel.flatMap((o) => bake(o));
   const g: SceneObject = { id: newId(), name: "Group", paths, mat: [1, 0, 0, 1, 0, 0], children: sel };
   const at = doc.objects.findIndex((o) => ids.has(o.id));

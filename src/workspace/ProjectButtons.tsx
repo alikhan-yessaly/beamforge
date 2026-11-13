@@ -1,6 +1,7 @@
 // Toolbar: New, Open (with recent files), Save (to the project's file), Save As… (to a new file), project name.
 import { t } from "../i18n";
-import { ChevronDown, FileOutput, FilePlus, FolderOpen, Save } from "lucide-preact";
+import { ChevronDown, FilePlus, FolderOpen, Save } from "lucide-preact";
+import { SaveAs } from "../ui/customIcons";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { dirty, newProject, openProject, openRecent, project, recentFiles, saveProject, saveProjectAs } from "../project/state";
 import { IconButton } from "../ui/icons";
@@ -62,7 +63,7 @@ export function ProjectButtons() {
         disabled={!hasFile || !dirty.value}
         onClick={() => void saveProject()}
       />
-      <IconButton icon={FileOutput} label={t("Save As… — save the project to a new .laserproj file (⇧⌘S)")} onClick={() => void saveProjectAs()} />
+      <IconButton icon={SaveAs} label={t("Save As… — save the project to a new .laserproj file (⇧⌘S)")} onClick={() => void saveProjectAs()} />
       <span
         class={`ws-project-name${dirty.value ? " dirty" : ""}`}
         title={`${hasFile ? t("Project file: {file}", { file: fileName }) : t("Not saved to a file yet (use Save As…)")}${dirty.value ? ` · ${t("unsaved changes")}` : ""}. ${t("Your work is also autosaved in this browser, so a reload keeps it.")}`}
