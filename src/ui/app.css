@@ -389,3 +389,5 @@ body > #workspace { height: 100%; border: 0; }
 .ws-machine-files .ws-row { justify-content: space-between; }
 .ws-machine-files ol { margin: .2rem 0; padding-left: 1.6rem; font-family: ui-monospace, monospace; }
 .ws-machine-files li.ws-taken { color: var(--ws-out); font-weight: 600; }
+.ws-machine-files li > span { display: inline-block; min-width: 9rem; }
+.ws-machine-files li button { padding: .05rem; vertical-align: middle; }

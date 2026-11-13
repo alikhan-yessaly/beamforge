@@ -666,4 +666,10 @@ export const ru: Dictionary = {
   "Use 1–16 letters, digits, spaces, dots, dashes or underscores.": "Используйте 1–16 латинских букв, цифр, пробелов, точек, дефисов или подчёркиваний.",
   "Wait until the machine has finished (or stop it) before editing.": "Дождитесь окончания работы станка (или остановите его), прежде чем редактировать.",
   "Workspace mode": "Режим работы",
+  "Delete {name} from the machine's memory? This can't be undone.": "Удалить {name} из памяти станка? Это нельзя отменить.",
+  "Deleted {name} from the machine.": "{name} удалён со станка.",
+  "Sent the delete for {name}, but the machine's file count didn't go down ({before} → {after}).": "Команда удаления {name} отправлена, но число файлов на станке не уменьшилось ({before} → {after}).",
+  "Delete on the machine: {error}": "Удаление на станке: {error}",
+  "Delete {name} from the machine": "Удалить {name} со станка",
+  "The machine's file list changed. Read it again and retry.": "Список файлов на станке изменился. Прочитайте его заново и повторите.",
 };

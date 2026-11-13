@@ -169,6 +169,13 @@ export class SimulatorTransport implements Transport {
       }
       return;
     }
+    if (a === 0xe8 && b === 0x00 && c.length >= 6) {
+      // Delete stored files from..to (1-based, inclusive).
+      const from = (c[2]! << 7) | c[3]!;
+      const to = (c[4]! << 7) | c[5]!;
+      if (from >= 1 && to >= from) this.files.splice(from - 1, to - from + 1);
+      return;
+    }
     if (a === 0xe8 && b === 0x02) {
       this.storeAs = "";
       return;

@@ -8,6 +8,7 @@ import {
   ADDR_FILE_COUNT,
   ADDR_MACHINE_STATUS,
   STATUS_MOVING,
+  deleteFiles,
   normalizeFileName,
   parseFileNameReply,
   readFileName,
@@ -38,6 +39,27 @@ export async function listFiles(link: RuidaLink): Promise<string[]> {
   return names;
 }
 
+/**
+ * Delete stored file number `index` (1-based) after checking it is still called `name` (the list may have changed
+ * since it was shown). One `E8 00 i i` as LightBurn sends it; returns the file count after (null if unanswered).
+ */
+export async function deleteFileOnController(link: RuidaLink, index: number, name: string, opts: { settleMs?: number } = {}): Promise<{ before: number; after: number | null }> {
+  if (!link.verified) throw new Error(t("Not connected and verified"));
+  const status = await read(link, ADDR_MACHINE_STATUS);
+  if (status & (STATUS_JOB_ACTIVE | STATUS_MOVING)) throw new Error(t("Machine is busy (status {status})", { status: `0x${status.toString(16)}` }));
+  const names = await listFiles(link);
+  if (names[index - 1] !== name) throw new Error(t("The machine's file list changed. Read it again and retry."));
+  await link.send(deleteFiles(index), `delete file ${index} ${name}`);
+  await new Promise((r) => setTimeout(r, opts.settleMs ?? 300));
+  let after: number | null = null;
+  try {
+    after = await read(link, ADDR_FILE_COUNT);
+  } catch {
+    after = null;
+  }
+  return { before: names.length, after };
+}
+
 export interface SaveResult {
   name: string;
   /** Stored-file count before and after; `after` is null when the controller didn't answer. */
@@ -48,7 +70,7 @@ export interface SaveResult {
 /**
  * Store a job on the controller under `name` without running it: E8 02 + E7 01 <name> 00 in one write, then the
  * job stream exactly as for Start, in ~255-byte writes. Refuses a name already in use (how the controller
- * overwrites is not known) and a busy machine. Absolute jobs must fit the bed.
+ * overwrites is not known; delete the old file first) and a busy machine. Absolute jobs must fit the bed.
  */
 export async function saveJobToController(
   link: RuidaLink,

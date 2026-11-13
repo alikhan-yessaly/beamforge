@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { listFiles, saveJobToController } from "../src/controller/files";
+import { deleteFileOnController, listFiles, saveJobToController } from "../src/controller/files";
 import { RuidaLink } from "../src/controller/link";
 import { splitCommands } from "../src/protocol/chunk";
-import { normalizeFileName, parseFileNameReply, readFileName, storeJobHeader } from "../src/protocol/encode";
+import { deleteFiles, normalizeFileName, parseFileNameReply, readFileName, storeJobHeader } from "../src/protocol/encode";
 import { encodeJobCommands } from "../src/protocol/jobEncode";
 import { DEFAULT_MAGIC, unswizzle } from "../src/protocol/swizzle";
 import { SimulatorTransport } from "../src/transport/simulator";
@@ -62,6 +62,19 @@ describe("saving a job on the controller (simulator)", () => {
     expect(hex(tx[0]!.plain!)).toBe(hex(storeJobHeader("PLATE 1")));
     expect(tx.slice(1).every((e) => e.plain!.length <= 255)).toBe(true);
     expect(progress.at(-1)).toBe(tx.length - 1);
+  });
+
+  it("deletes one file as LightBurn does (E8 00 i i, traced 2026-11-13), after checking its name", async () => {
+    expect(hex(deleteFiles(4))).toBe("e80000040004");
+    expect(hex(deleteFiles(130, 131))).toBe("e800010201" + "03");
+    const { sim, link } = await connected();
+    await saveJobToController(link, job(), "A", () => {}, { settleMs: 0 });
+    await saveJobToController(link, job(), "B", () => {}, { settleMs: 0 });
+    expect(await listFiles(link)).toEqual(["RUN 1", "RUN 2", "A", "B"]);
+    await expect(deleteFileOnController(link, 3, "B", { settleMs: 0 })).rejects.toThrow(/changed/);
+    expect(await deleteFileOnController(link, 3, "A", { settleMs: 0 })).toEqual({ before: 4, after: 3 });
+    expect(await listFiles(link)).toEqual(["RUN 1", "RUN 2", "B"]);
+    expect(sim.files.map((f) => f.name)).toEqual(["RUN 1", "RUN 2", "B"]);
   });
 
   it("refuses a name the controller already has", async () => {

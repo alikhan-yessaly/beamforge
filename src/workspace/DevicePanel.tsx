@@ -3,9 +3,9 @@
 import { msg, t, tp } from "../i18n";
 import { computed, signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { ArrowRight, ChevronDown, ChevronUp, HardDriveDownload, PencilRuler, RefreshCw, Route, Timer, TriangleAlert } from "lucide-preact";
+import { ArrowRight, ChevronDown, ChevronUp, HardDriveDownload, PencilRuler, RefreshCw, Route, Timer, Trash2, TriangleAlert } from "lucide-preact";
 import { linkState, link } from "../app/connection";
-import { listFiles, saveJobToController } from "../controller/files";
+import { deleteFileOnController, listFiles, saveJobToController } from "../controller/files";
 import { formatDuration } from "../job/estimate";
 import { activeLayers, moveLayer } from "../job/layers";
 import type { JobOrder } from "../job/plan";
@@ -187,6 +187,21 @@ async function save(name: string): Promise<void> {
   }
 }
 
+async function remove(index: number, name: string): Promise<void> {
+  if (!window.confirm(t("Delete {name} from the machine's memory? This can't be undone.", { name }))) return;
+  savingToMachine.value = true;
+  try {
+    const r = await deleteFileOnController(link, index, name);
+    if (r.after === r.before - 1) notify(t("Deleted {name} from the machine.", { name }));
+    else notify(t("Sent the delete for {name}, but the machine's file count didn't go down ({before} → {after}).", { name, before: r.before, after: r.after ?? "?" }), "warn");
+  } catch (e) {
+    notify(t("Delete on the machine: {error}", { error: errText(e) }), "error");
+  } finally {
+    savingToMachine.value = false;
+    void refreshFiles();
+  }
+}
+
 const fileName = signal<string | null>(null);
 
 function SaveToMachine() {
@@ -229,7 +244,8 @@ function SaveToMachine() {
               <ol>
                 {files.names.map((f, i) => (
                   <li key={`${i}-${f}`} class={f === n ? "ws-taken" : ""}>
-                    {f}
+                    <span>{f}</span>
+                    <IconButton icon={Trash2} label={t("Delete {name} from the machine", { name: f })} disabled={busy} onClick={() => void remove(i + 1, f)} />
                   </li>
                 ))}
               </ol>

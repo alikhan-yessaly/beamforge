@@ -666,4 +666,10 @@ export const kk: Dictionary = {
   "Use 1–16 letters, digits, spaces, dots, dashes or underscores.": "1–16 латын әрпін, цифрды, бос орынды, нүктені, сызықшаны немесе астын сызуды қолданыңыз.",
   "Wait until the machine has finished (or stop it) before editing.": "Өңдеуден бұрын станок жұмысын аяқтағанша күтіңіз (немесе тоқтатыңыз).",
   "Workspace mode": "Жұмыс режимі",
+  "Delete {name} from the machine's memory? This can't be undone.": "{name} файлын станок жадынан өшіру керек пе? Мұны қайтару мүмкін емес.",
+  "Deleted {name} from the machine.": "{name} станоктан өшірілді.",
+  "Sent the delete for {name}, but the machine's file count didn't go down ({before} → {after}).": "{name} өшіру командасы жіберілді, бірақ станоктағы файлдар саны азаймады ({before} → {after}).",
+  "Delete on the machine: {error}": "Станокта өшіру: {error}",
+  "Delete {name} from the machine": "{name} файлын станоктан өшіру",
+  "The machine's file list changed. Read it again and retry.": "Станоктағы файлдар тізімі өзгерді. Оны қайта оқып, қайталаңыз.",
 };

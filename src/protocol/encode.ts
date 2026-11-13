@@ -48,6 +48,8 @@ export function normalizeFileName(name: string): string | null {
 
 /** E8 01 <index>: ask for the name of stored file `index` (1-based, 14-bit). */
 export const readFileName = (index: number) => Uint8Array.of(0xe8, 0x01, (index >> 7) & 0x7f, index & 0x7f);
+/** Delete stored files `from`..`to` (1-based, inclusive); no reply. LightBurn deletes one file as from = to. */
+export const deleteFiles = (from: number, to = from) => Uint8Array.of(0xe8, 0x00, (from >> 7) & 0x7f, from & 0x7f, (to >> 7) & 0x7f, to & 0x7f);
 
 /** Parse an E8 01 <index> <name> 00 reply. */
 export function parseFileNameReply(c: Uint8Array): { index: number; name: string } | null {
