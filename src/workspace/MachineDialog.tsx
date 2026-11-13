@@ -5,7 +5,7 @@ import { t } from "../i18n";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { linkState } from "../app/connection";
 import { MACHINE_CLASSES, applyClass, classById } from "../machine/classes";
-import { machinePrompt, machines, notify, profile, updateMachine } from "../scene/store";
+import { machinePrompt, machines, notify, postponeClassQuestion, profile, updateMachine } from "../scene/store";
 import { presets, presetsFor, savePresets, seedPresets } from "./materials";
 
 function ClassQuestion(props: { id: string; done: () => void }) {
@@ -35,7 +35,7 @@ function ClassQuestion(props: { id: string; done: () => void }) {
         <input type="checkbox" checked={seed} onChange={(e) => setSeed(e.currentTarget.checked)} /> {t("Add typical material presets (plywood, acrylic, cardboard, leather)")}
       </label>
       <div class="ws-row ws-dialog-actions">
-        <button type="button" onClick={props.done}>{t("Later")}</button>
+        <button type="button" onClick={() => (postponeClassQuestion(props.id), props.done())}>{t("Later")}</button>
         <button type="button" class="ws-primary-btn" autofocus onClick={ok}>{t("Use these values")}</button>
       </div>
     </>
@@ -59,7 +59,10 @@ export function MachineDialog() {
     close();
     if (q.kind === "choose") q.resolve(null);
     else if (q.kind === "mismatch") q.resolve(null);
-    else q.resolve();
+    else {
+      postponeClassQuestion(q.id);
+      q.resolve();
+    }
   };
   return (
     <dialog ref={ref} class="ws-dialog ws-machine-dialog" onCancel={(e) => (e.preventDefault(), cancel())}>

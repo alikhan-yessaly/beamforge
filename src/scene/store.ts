@@ -106,6 +106,16 @@ export type MachinePrompt =
   | { kind: "class"; id: string; resolve: () => void };
 export const machinePrompt = signal<MachinePrompt | null>(null);
 
+/** `tuning.dismissed` entry: the owner chose "Later" for the machine-class question; don't ask on every connect. */
+export const CLASS_QUESTION = "class";
+
+/** Don't ask the machine-class question again for this profile (it can still be chosen in the Machine tab). */
+export function postponeClassQuestion(id: string): void {
+  const m = machines.value.find((x) => x.id === id);
+  if (!m || m.class || m.tuning?.dismissed?.includes(CLASS_QUESTION)) return;
+  updateMachine({ ...m, tuning: { ...m.tuning, dismissed: [...(m.tuning?.dismissed ?? []), CLASS_QUESTION] } });
+}
+
 const sameBed = (c: NonNullable<MachineProfile["controller"]>, w: number, h: number) => Math.abs(c.bedW - w) < 1 && Math.abs(c.bedH - h) < 1;
 
 /**
@@ -125,11 +135,11 @@ export async function identifyController(cardId: number, bedW: number, bedH: num
       if (id) selectMachine(id);
     } else if (active.controller) {
       const choice = await new Promise<"keep" | "new" | null>((resolve) => (machinePrompt.value = { kind: "mismatch", resolve }));
-      if (choice === "new") addMachine({ ...DEFAULT_PROFILE, name: `${DEFAULT_PROFILE.name} ${machines.value.length + 1}` });
+      if (choice === "new") addMachine({ ...DEFAULT_PROFILE, name: t("Machine {n}", { n: machines.value.length + 1 }) });
     }
   }
   profile.value = { ...profile.value, controller, bedW, bedH };
-  if (!profile.value.class) await new Promise<void>((resolve) => (machinePrompt.value = { kind: "class", id: profile.value.id!, resolve }));
+  if (!profile.value.class && !profile.value.tuning?.dismissed?.includes(CLASS_QUESTION)) await new Promise<void>((resolve) => (machinePrompt.value = { kind: "class", id: profile.value.id!, resolve }));
 }
 export const prefs = signal<Prefs>(load(PREFS_KEY, { snapToGrid: false, gridStep: 10, anchor: { fx: 0, fy: 0 }, lockAspect: true, innerFirst: true, startFrom: "absolute", jobOrder: "auto", advanced: false }));
 export const selection = signal<ReadonlySet<string>>(new Set());

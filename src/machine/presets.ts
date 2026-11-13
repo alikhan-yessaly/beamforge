@@ -21,6 +21,10 @@ export interface MaterialPreset {
   passes: number;
   /** Cut presets: kerf width in mm (from the kerf test card), applied as kerf compensation. */
   kerf?: number;
+  /** ISO date when a test card set this preset (power/speed grid); missing for typed or typical settings. */
+  tuned?: string;
+  /** ISO date when the kerf test card measured `kerf`. */
+  kerfTuned?: string;
 }
 
 export function validPreset(p: MaterialPreset): boolean {
@@ -52,6 +56,11 @@ export function presetSettings(p: MaterialPreset): Partial<Omit<Layer, "color">>
   if (p.op === "cut") out.kerf = p.kerf ?? 0;
   return out;
 }
+
+/** Materials whose settings came from the power and speed test card. */
+export const tunedMaterials = (list: MaterialPreset[]) => new Set(list.filter((p) => p.tuned && p.material).map((p) => p.material!));
+/** Whether any preset's kerf was measured with the kerf test card. */
+export const kerfMeasured = (list: MaterialPreset[]) => list.some((p) => p.kerfTuned);
 
 /** Whether a preset belongs to a machine profile (by id; older presets by name). */
 export const presetOf = (p: MaterialPreset, m: Pick<MachineProfile, "id" | "name">) => (p.machineId ? p.machineId === m.id : p.machine === m.name);

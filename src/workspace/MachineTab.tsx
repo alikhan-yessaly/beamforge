@@ -1,12 +1,11 @@
 // Machine tab: simple mode (head position, jog, Go to, machine profile) or developer mode (adds connection
 // details, raw status, raw bytes and the traffic log). The jog/diagnostics DOM comes from
 // src/ui/machinePanel.ts and index.html; elements marked .dev-only are hidden in simple mode.
-import { t, tp } from "../i18n";
+import { t } from "../i18n";
 import { SlidersHorizontal, Wrench } from "lucide-preact";
 import { profile } from "../scene/store";
 import { classById } from "../machine/classes";
-import { openTuning } from "./TuningDialog";
-import { presetsFor } from "./materials";
+import { openTuning, stepDone } from "./TuningDialog";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { headPos, linkState, watchHeadPosition } from "../app/connection";
 import { IconButton } from "../ui/icons";
@@ -52,12 +51,11 @@ function HeadPosition(props: { active: boolean }) {
 function TuningSection() {
   const p = profile.value;
   const tn = p.tuning ?? {};
-  const mats = presetsFor(p);
   const rows: [string, string | null, Parameters<typeof openTuning>[0]][] = [
-    [t("Fill evenness"), tn.fill ?? null, "fill"],
-    [t("Scan offset"), tn.scanOffset ?? null, "scan"],
-    [t("Power and speed"), mats.some((m) => m.material) ? tp(["{n} material", "{n} materials"], new Set(mats.map((m) => m.material).filter(Boolean)).size) : null, "grid"],
-    [t("Kerf"), mats.some((m) => m.kerf !== undefined) ? t("done for some materials") : null, "kerf"],
+    [t("Fill evenness"), stepDone("fill"), "fill"],
+    [t("Scan offset"), stepDone("scan"), "scan"],
+    [t("Power and speed"), stepDone("grid"), "grid"],
+    [t("Kerf"), stepDone("kerf"), "kerf"],
   ];
   const cls = classById(p.class);
   return (

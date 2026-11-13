@@ -8,13 +8,14 @@ import { updateLayer } from "../src/job/layers";
 import { type Toolpath, planToolpath } from "../src/job/plan";
 import { MACHINE_CLASSES, applyClass, seedsFor } from "../src/machine/classes";
 import { energyRatio, overscanLength, rampDistance, scanOffsetAt, suggestCornerPower } from "../src/machine/motion";
-import { type MaterialPreset } from "../src/machine/presets";
+import { type MaterialPreset, kerfMeasured, tunedMaterials } from "../src/machine/presets";
 import { parseTune, serializeTune } from "../src/machine/tuneFile";
 import { compareMaterials, parseProject, serializeProject } from "../src/project/format";
 import { DEFAULT_PROFILE, type Doc, type Layer, type MachineProfile } from "../src/scene/model";
-import { addMachine, identifyController, machinePrompt, machines, profile } from "../src/scene/store";
+import { addMachine, identifyController, machinePrompt, machines, postponeClassQuestion, profile } from "../src/scene/store";
 import { type FillCardParams, accelFromStrip, colorsNeeded, fillParams, gridParams, kerfParams, makeCard, rampLengths, scanParams } from "../src/tuning/cards";
-import { cardsIn, freeColors, onlyCard, placeCard } from "../src/tuning/place";
+import { cardsIn, freeColors, freeSpot, onlyCard, placeCard } from "../src/tuning/place";
+import { objectBox } from "../src/scene/ops";
 
 const F = "#00e000";
 const G = "#0000ff";
@@ -213,10 +214,35 @@ describe("test cards", () => {
     expect(alone.layers.find((l) => l.color === F)?.output).toBe(false);
     expect(() => freeColors(d, 99)).toThrow();
   });
+
+  it("puts a second card beside the first and keeps clear of the drawing", () => {
+    // A part sitting at the home corner.
+    const d = fillDoc([sq(10, 10, 40)]);
+    const box = (doc: Doc, id: string) => objectBox(doc.objects.find((o) => o.id === id)!);
+    const apart = (a: ReturnType<typeof objectBox>, b: ReturnType<typeof objectBox>) => a.maxX <= b.minX || b.maxX <= a.minX || a.maxY <= b.minY || b.maxY <= a.minY;
+    const first = placeCard(d, scanParams(200, 20, freeColors(d, colorsNeeded("scan"))), M);
+    expect(first.overlaps).toBe(false);
+    const second = placeCard(first.doc, scanParams(200, 20, freeColors(first.doc, colorsNeeded("scan"))), M);
+    expect(second.overlaps).toBe(false);
+    const part = objectBox(d.objects[0]!);
+    expect(apart(box(first.doc, first.id), part)).toBe(true);
+    expect(apart(box(second.doc, second.id), part)).toBe(true);
+    expect(apart(box(second.doc, second.id), box(second.doc, first.id))).toBe(true);
+    // Nowhere to go on a tiny bed: placed at the corner and flagged.
+    expect(placeCard(d, scanParams(200, 20, freeColors(d, colorsNeeded("scan"))), { ...M, bedW: 60, bedH: 60 }).overlaps).toBe(true);
+    expect(freeSpot(d, 10, 10, { bedW: 600, bedH: 400, origin: "top-left" })).not.toBeNull();
+  });
 });
 
 describe("tuning and project files", () => {
   const mat: MaterialPreset = { id: "m1", name: "Ply cut", machine: M.name, speed: 15, minPower: 60, maxPower: 60, passes: 1, material: "3 mm plywood", op: "cut", kerf: 0.15 };
+
+  it("counts only test-card results as tuned, not typed or typical presets", () => {
+    expect(tunedMaterials([mat, { ...mat, id: "m2", material: "acrylic" }]).size).toBe(0);
+    expect([...tunedMaterials([mat, { ...mat, id: "m2", tuned: "2026-11-13" }])]).toEqual(["3 mm plywood"]);
+    expect(kerfMeasured([mat])).toBe(false);
+    expect(kerfMeasured([{ ...mat, kerfTuned: "2026-11-13" }])).toBe(true);
+  });
 
   it("round-trips a tuning file and rejects bad ones", () => {
     const f = parseTune(serializeTune({ ...M, scanOffsets: [{ speed: 100, offset: 0.1 }] }, [mat]));
@@ -260,11 +286,10 @@ describe("controller auto-match", () => {
     expect(profile.value.id).toBe(second.id);
     await identifyController(222, 900, 600);
     expect(profile.value.controller?.cardId).toBe(222);
-    // The first controller again: switches back on its own (and asks the class again: "Later" was chosen).
-    const back = identifyController(111, 600, 400);
-    const q = await answer();
-    if (q?.kind === "class") q.resolve();
-    await back;
+    // The first controller again: switches back on its own; "Later" on the class question isn't asked again.
+    postponeClassQuestion(first.id!);
+    await identifyController(111, 600, 400);
+    expect(machinePrompt.value).toBeNull();
     expect(profile.value.id).toBe(first.id);
     // A controller no profile knows, on a bound profile: asks; "new" makes a profile (then asks its class).
     const n = machines.value.length;

@@ -972,4 +972,6 @@ export const ru: Dictionary = {
   "Add the card and engrave it first; then its drawing appears here to click on.": "Сначала добавьте карту и выгравируйте её; затем здесь появится её рисунок, на котором можно нажимать.",
   "{n} material": { one: "{n} материал", few: "{n} материала", many: "{n} материалов", other: "{n} материала" },
   "Loaded the tuning of \"{name}\" ({n} material).": { one: "Загружена настройка «{name}» ({n} материал).", few: "Загружена настройка «{name}» ({n} материала).", many: "Загружена настройка «{name}» ({n} материалов).", other: "Загружена настройка «{name}» ({n} материала)." },
+  "Speed must be 1–{max} mm/s and power above 0 and at most 100 %.": "Скорость должна быть 1–{max} мм/с, мощность — больше 0 и не более 100 %.",
+  "No free room on the bed: the test card overlaps the drawing at the home corner. Move it onto scrap before you Frame.": "На поле нет свободного места: тестовая карта перекрывает рисунок у домашнего угла. Переместите её на обрезок перед запуском рамки.",
 };

@@ -30,6 +30,7 @@ import {
 } from "../tuning/cards";
 import { cardColors, cardsIn, onlyCard, placeCard } from "../tuning/place";
 import { type MaterialPreset, presets, presetsFor, savePresets } from "./materials";
+import { kerfMeasured, presetOf, tunedMaterials } from "../machine/presets";
 import { newId } from "../scene/model";
 import { appMode, enterPrepare } from "./mode";
 
@@ -117,22 +118,42 @@ function cutDefaults(material: string): { speed: number; power: number; passes: 
   return { speed: seed.speed, power: seed.power, passes: seed.passes };
 }
 
-function Num(props: { label: string; unit: string; value: number; onInput: (v: number) => void }) {
+/** Numeric field that keeps what is typed (so "12." or an empty field can be edited) and reports NaN until valid. */
+function Num(props: { label: string; unit: string; value: number; invalid?: boolean; onInput: (v: number) => void }) {
+  const [text, setText] = useState(String(props.value));
   return (
     <label class="ws-lf">
       <span>{props.label}</span>
-      <input inputMode="decimal" value={props.value} onInput={(e) => props.onInput(Number(e.currentTarget.value.replace(",", ".")) || 0)} />
+      <input
+        inputMode="decimal"
+        aria-invalid={props.invalid || undefined}
+        value={text}
+        onInput={(e) => {
+          const s = e.currentTarget.value;
+          setText(s);
+          const v = s.trim() === "" ? NaN : Number(s.replace(",", "."));
+          props.onInput(v);
+        }}
+      />
       <em>{props.unit}</em>
     </label>
   );
 }
+
+/** Highest speed a test card may use, mm/s. */
+const MAX_CARD_SPEED = 1000;
 
 /** Making a card: its few inputs and "Add to the drawing". */
 function MakeCard(props: { kind: CardKind; onMade: () => void }) {
   const [eng, setEng] = useState(engraveDefaults);
   const materials = [...new Set(presetsFor(profile.value).map((p) => p.material).filter((m): m is string => !!m))];
   const [material, setMaterial] = useState(materials[0] ?? "");
+  const speedOk = Number.isFinite(eng.speed) && eng.speed >= 1 && eng.speed <= MAX_CARD_SPEED;
+  const powerOk = Number.isFinite(eng.power) && eng.power > 0 && eng.power <= 100;
+  const needsEngrave = props.kind !== "kerf";
+  const ok = !needsEngrave || (speedOk && powerOk);
   const add = () => {
+    if (!ok) return;
     try {
       const colors = cardColors(doc.value, props.kind);
       const params: CardParams =
@@ -147,7 +168,8 @@ function MakeCard(props: { kind: CardKind; onMade: () => void }) {
       if (appMode.value !== "prepare") enterPrepare();
       commit(r.doc);
       selection.value = new Set([r.id]);
-      notify(t("Test card added near the home corner. Move it onto scrap, Frame, then Start."));
+      if (r.overlaps) notify(t("No free room on the bed: the test card overlaps the drawing at the home corner. Move it onto scrap before you Frame."), "warn");
+      else notify(t("Test card added near the home corner. Move it onto scrap, Frame, then Start."));
       props.onMade();
     } catch (e) {
       notify(e instanceof Error ? e.message : String(e), "error");
@@ -168,11 +190,12 @@ function MakeCard(props: { kind: CardKind; onMade: () => void }) {
       )}
       {props.kind !== "kerf" && (
         <div class="ws-layer-fields">
-          <Num label={t("Engrave speed")} unit="mm/s" value={eng.speed} onInput={(speed) => setEng({ ...eng, speed })} />
-          <Num label={t("Power")} unit="%" value={eng.power} onInput={(power) => setEng({ ...eng, power })} />
+          <Num label={t("Engrave speed")} unit="mm/s" value={eng.speed} invalid={!speedOk} onInput={(speed) => setEng((e) => ({ ...e, speed }))} />
+          <Num label={t("Power")} unit="%" value={eng.power} invalid={!powerOk} onInput={(power) => setEng((e) => ({ ...e, power }))} />
         </div>
       )}
-      <button type="button" class="ws-primary-btn" onClick={add}>
+      {!ok && <p class="warn" role="alert">{t("Speed must be 1–{max} mm/s and power above 0 and at most 100 %.", { max: MAX_CARD_SPEED })}</p>}
+      <button type="button" class="ws-primary-btn" disabled={!ok} onClick={add}>
         <CirclePlus size={14} strokeWidth={1.75} aria-hidden="true" /> {t("Add the test card to the drawing")}
       </button>
     </div>
@@ -241,11 +264,13 @@ const ROLE_NAME: Record<GridRole, string> = { engrave: msg("Engrave"), light: ms
 /** Preset name suffix per role. */
 const ROLE_PRESET: Record<GridRole, string> = { engrave: msg("engrave"), light: msg("light engrave"), cut: msg("cut"), score: msg("score") };
 
-function upsertPreset(list: MaterialPreset[], material: string, name: string, op: MaterialPreset["op"], s: { speed: number; power: number; passes?: number; kerf?: number }): MaterialPreset[] {
+/** Add or update this machine's preset `name` for `material`; returns the new list and the preset's id. */
+function upsertPreset(list: MaterialPreset[], material: string, name: string, op: MaterialPreset["op"], s: Partial<MaterialPreset> & { speed: number; power: number }): { list: MaterialPreset[]; id: string } {
   const m = profile.value;
-  const existing = list.find((p) => (p.machineId ? p.machineId === m.id : p.machine === m.name) && p.material === material && p.name === name);
-  const next: MaterialPreset = { ...(existing ?? { id: newId(), machine: m.name, machineId: m.id, material, name, passes: 1 }), op, speed: s.speed, minPower: s.power, maxPower: s.power, passes: s.passes ?? existing?.passes ?? 1, ...(s.kerf !== undefined ? { kerf: s.kerf } : {}) };
-  return [...list.filter((p) => p !== existing), next];
+  const existing = list.find((p) => presetOf(p, m) && p.material === material && p.name === name);
+  const { power, ...rest } = s;
+  const next: MaterialPreset = { ...(existing ?? { id: newId(), machine: m.name, machineId: m.id, material, name, passes: 1 }), ...rest, op, minPower: power, maxPower: power, passes: s.passes ?? existing?.passes ?? 1 };
+  return { list: [...list.filter((p) => p !== existing), next], id: next.id };
 }
 
 function GridResults(props: { params: GridCardParams; onSaved: () => void }) {
@@ -260,7 +285,7 @@ function GridResults(props: { params: GridCardParams; onSaved: () => void }) {
     const name = (r: GridRole) => `${mat} · ${t(ROLE_PRESET[r])}`;
     for (const r of ["engrave", "light", "cut", "score"] as GridRole[]) {
       const p = picks[r];
-      if (p) list = upsertPreset(list, mat, name(r), r === "light" ? "engrave" : r, { speed: p.speed!, power: p.power! });
+      if (p) list = upsertPreset(list, mat, name(r), r === "light" ? "engrave" : r, { speed: p.speed!, power: p.power!, tuned: today() }).list;
     }
     if (!savePresets(list)) return notify(t("Could not save the preset."), "error");
     notify(t("Saved the presets for {material} in this machine's material library.", { material: mat }));
@@ -307,13 +332,13 @@ function KerfResults(props: { params: KerfCardParams; onSaved: () => void }) {
   const save = () => {
     if (k === null) return;
     let list = presets.value;
-    if (target) list = list.map((p) => (p.id === target ? { ...p, kerf: k } : p));
-    else list = upsertPreset(list, props.params.material, `${props.params.material} · ${t("cut")}`, "cut", { speed: props.params.speed, power: props.params.power, passes: props.params.passes, kerf: k });
+    let id = target;
+    if (target) list = list.map((p) => (p.id === target ? { ...p, kerf: k, kerfTuned: today() } : p));
+    else ({ list, id } = upsertPreset(list, props.params.material, `${props.params.material} · ${t("cut")}`, "cut", { speed: props.params.speed, power: props.params.power, passes: props.params.passes, kerf: k, kerfTuned: today() }));
     if (!savePresets(list)) return notify(t("Could not save the preset."), "error");
     // Layers already using the preset get the kerf too.
-    const id = target || list.find((p) => p.material === props.params.material && p.op === "cut" && p.kerf === k)?.id;
     let d = doc.value;
-    for (const l of activeLayers(d)) if (id && l.material === id) d = updateLayer(d, l.color, { kerf: k });
+    for (const l of activeLayers(d)) if (l.material === id) d = updateLayer(d, l.color, { kerf: k });
     if (d !== doc.value) commit(d);
     notify(t("Saved kerf {k} mm. Cut layers using this preset are compensated for it.", { k }));
     props.onSaved();
@@ -341,13 +366,15 @@ function KerfResults(props: { params: KerfCardParams; onSaved: () => void }) {
   );
 }
 
-function stepDone(kind: CardKind): string | null {
+/** What a tuning step has measured for the active machine (a date or a count), or null when not done. */
+export function stepDone(kind: CardKind): string | null {
   const tn = profile.value.tuning;
   if (kind === "fill") return tn?.fill ?? null;
   if (kind === "scan") return tn?.scanOffset ?? null;
   const list = presetsFor(profile.value);
-  if (kind === "kerf") return list.some((p) => p.kerf !== undefined) ? t("done for some materials") : null;
-  return list.some((p) => p.material) ? tp(["{n} material", "{n} materials"], new Set(list.map((p) => p.material).filter(Boolean)).size) : null;
+  if (kind === "kerf") return kerfMeasured(list) ? t("done for some materials") : null;
+  const n = tunedMaterials(list).size;
+  return n ? tp(["{n} material", "{n} materials"], n) : null;
 }
 
 export function TuningDialog() {

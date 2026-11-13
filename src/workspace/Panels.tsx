@@ -270,10 +270,23 @@ export function ProfileSection(props: { advanced: boolean }) {
   }, []);
   const bed = bedLoad.value;
   const currentProfile = profile.value;
-  // Another profile became active, or it changed elsewhere (tuning, bed read): start over from it.
+  // Another profile became active: start over from it. The same profile changed elsewhere (tuning, bed read):
+  // take those changes but keep the fields typed here and not yet saved.
+  const base = useRef(currentProfile);
   useEffect(() => {
-    setDraft(currentProfile);
-    setScan(scanText(currentProfile.scanOffsets));
+    const old = base.current;
+    base.current = currentProfile;
+    if (old === currentProfile) return;
+    if (old.id !== currentProfile.id) {
+      setDraft(currentProfile);
+      setScan(scanText(currentProfile.scanOffsets));
+      return;
+    }
+    setDraft((d) => {
+      const typed = (Object.keys(d) as (keyof MachineProfile)[]).filter((k) => d[k] !== old[k]);
+      return { ...currentProfile, ...Object.fromEntries(typed.map((k) => [k, d[k]])) };
+    });
+    setScan((s) => (s === scanText(old.scanOffsets) ? scanText(currentProfile.scanOffsets) : s));
   }, [currentProfile]);
   const cardId = linkState.value === "verified" ? link.cardId : null;
   const adv = prefs.value.advanced;

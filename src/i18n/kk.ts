@@ -972,4 +972,6 @@ export const kk: Dictionary = {
   "Add the card and engrave it first; then its drawing appears here to click on.": "Алдымен картаны қосып, гравюралаңыз; содан кейін мұнда оның басуға болатын сызбасы шығады.",
   "{n} material": { one: "{n} материал", other: "{n} материал" },
   "Loaded the tuning of \"{name}\" ({n} material).": { one: "«{name}» баптауы жүктелді ({n} материал).", other: "«{name}» баптауы жүктелді ({n} материал)." },
+  "Speed must be 1–{max} mm/s and power above 0 and at most 100 %.": "Жылдамдық 1–{max} мм/с, қуат 0-ден жоғары және 100 %-дан аспауы керек.",
+  "No free room on the bed: the test card overlaps the drawing at the home corner. Move it onto scrap before you Frame.": "Үстелде бос орын жоқ: тест картасы үй бұрышындағы сызбаның үстіне түсті. Рамканы жүргізбес бұрын оны қалдық материалға жылжытыңыз.",
 };
