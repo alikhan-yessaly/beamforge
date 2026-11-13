@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { type ColorChoice, type FillsAs, buildObject, conflicts, defaultChoices, keptSize } from "../import/build";
 import type { PdfDoc } from "../import/pdf";
 import { type DecodedImage, keepableUrl, pixels } from "../import/raster";
-import { SMOOTH_MM, type SmoothLevel, segmentCount, smoothImport, suggestedLevel } from "../import/smooth";
+import { SMOOTH_MAX_MM, SMOOTH_MIN_MM, SMOOTH_MM, type SmoothLevel, clampSmoothMm, segmentCount, smoothImport, suggestedLevel } from "../import/smooth";
 import { DEFAULT_TRACE, type TraceResult, type TraceSettings } from "../import/trace/pipeline";
 import type { Rgba, VectorImport } from "../import/types";
 import { PALETTE } from "../job/layers";
@@ -183,7 +183,7 @@ function drawPreview(c: HTMLCanvasElement | null, vi: VectorImport | null, targe
 
 function VectorBody({ req, finish }: { req: Extract<Request, { kind: "vector" }>; finish: (o: ImportOutcome | null) => void }) {
   const [raw, setVi] = useState(req.vi);
-  const [smooth, setSmooth] = useState<SmoothLevel>(() => suggestedLevel(req.vi.paths));
+  const [smoothMm, setSmoothMm] = useState(() => SMOOTH_MM[suggestedLevel(req.vi.paths)]);
   const [keepCorners, setKeepCorners] = useState(true);
   const [page, setPage] = useState(1);
   const [fills, setFills] = useState<FillsAs>("engrave");
@@ -192,7 +192,7 @@ function VectorBody({ req, finish }: { req: Extract<Request, { kind: "vector" }>
   const canvas = useRef<HTMLCanvasElement>(null);
   const d = doc.value;
   // Smoothing works in mm of the finished size, so it follows the scale.
-  const vi = useMemo(() => smoothImport(raw, { scale: SMOOTH_MM[smooth] / (scalePct / 100), cornerAngle: keepCorners ? undefined : 180 }), [raw, smooth, keepCorners, scalePct]);
+  const vi = useMemo(() => smoothImport(raw, { scale: smoothMm / (scalePct / 100), cornerAngle: keepCorners ? undefined : 180 }), [raw, smoothMm, keepCorners, scalePct]);
   const choices = useMemo(() => defaultChoices(vi, d).map((c) => (c.key in overrides ? { ...c, target: overrides[c.key]! } : c)), [vi, overrides]);
   const target = (key: string) => choices.find((c) => c.key === key)?.target ?? null;
   const clash = conflicts(choices, fills, d);
@@ -233,7 +233,7 @@ function VectorBody({ req, finish }: { req: Extract<Request, { kind: "vector" }>
             </small>
           </span>
         </label>
-        <SmoothControls level={smooth} keepCorners={keepCorners} onLevel={setSmooth} onKeepCorners={setKeepCorners} before={segmentCount(raw.paths)} after={segmentCount(vi.paths)} />
+        <SmoothControls mm={smoothMm} keepCorners={keepCorners} onMm={setSmoothMm} onKeepCorners={setKeepCorners} before={segmentCount(raw.paths)} after={segmentCount(vi.paths)} />
         <label>
           <span>{t("Filled shapes")}</span>
           <select value={fills} onChange={(e) => setFills(e.currentTarget.value as FillsAs)}>
@@ -408,9 +408,9 @@ function RasterBody({ req, finish }: { req: Extract<Request, { kind: "raster" }>
             <Slider label={t("Despeckle")} min={0} max={100} value={s.turdSize} on={(v) => set({ turdSize: v })} />
             <Slider label={t("Smooth corners")} min={0} max={133} value={Math.round(s.smoothness * 100)} on={(v) => set({ smoothness: v / 100 })} />
             <SmoothControls
-              level={s.smooth}
+              mm={s.smoothMm}
               keepCorners={s.keepCorners}
-              onLevel={(v) => set({ smooth: v })}
+              onMm={(v) => set({ smoothMm: v })}
               onKeepCorners={(v) => set({ keepCorners: v })}
               before={result?.segments.before ?? null}
               after={result?.segments.after ?? null}
@@ -468,31 +468,73 @@ const SMOOTH_LEVELS: { v: SmoothLevel; label: string }[] = [
   { v: "max", label: msg("Very strong (2 mm)") },
 ];
 
-/** Outline smoothing: level, corners, and what it did to the segment count. */
-function SmoothControls(props: { level: SmoothLevel; keepCorners: boolean; onLevel: (v: SmoothLevel) => void; onKeepCorners: (v: boolean) => void; before: number | null; after: number | null }) {
-  const { level, before, after } = props;
+/** Outline smoothing: a preset or a typed-in size in mm, corners, and what it did to the segment count. */
+function SmoothControls(props: { mm: number; keepCorners: boolean; onMm: (v: number) => void; onKeepCorners: (v: boolean) => void; before: number | null; after: number | null }) {
+  const { mm, before, after } = props;
+  const preset = SMOOTH_LEVELS.find((l) => SMOOTH_MM[l.v] === mm);
+  const [custom, setCustom] = useState(!preset);
+  const [text, setText] = useState(String(mm));
+  useEffect(() => setText(String(mm)), [mm]);
+  const commit = (raw: string) => {
+    const v = clampSmoothMm(Number(raw.replace(",", ".")));
+    setText(String(v));
+    if (v !== mm) props.onMm(v);
+  };
+  const off = mm === 0;
   return (
     <>
       <label>
         <span>{t("Outline smoothing")}</span>
-        <select value={level} onChange={(e) => props.onLevel(e.currentTarget.value as SmoothLevel)}>
+        <select
+          value={custom || !preset ? "custom" : preset.v}
+          onChange={(e) => {
+            const v = e.currentTarget.value;
+            if (v === "custom") {
+              setCustom(true);
+              if (mm === 0) props.onMm(SMOOTH_MM.light);
+            } else {
+              setCustom(false);
+              props.onMm(SMOOTH_MM[v as SmoothLevel]);
+            }
+          }}
+        >
           {SMOOTH_LEVELS.map((l) => (
             <option key={l.v} value={l.v}>
               {t(l.label)}
             </option>
           ))}
+          <option value="custom">{t("Custom size…")}</option>
         </select>
       </label>
-      {level !== "off" && (
+      {(custom || !preset) && (
+        <label>
+          <span>{t("Smoothing size")}</span>
+          <span class="ws-row">
+            <input
+              type="number"
+              min={0}
+              max={SMOOTH_MAX_MM}
+              step={0.05}
+              value={text}
+              onInput={(e) => setText(e.currentTarget.value)}
+              onChange={(e) => commit(e.currentTarget.value)}
+              onKeyDown={(e) => e.key === "Enter" && commit(e.currentTarget.value)}
+            />{" "}
+            mm
+          </span>
+        </label>
+      )}
+      {(custom || !preset) && <small class="ws-hint">{t("{min}–{max} mm, 0 turns smoothing off. Details and closed shapes smaller than this are smoothed away.", { min: SMOOTH_MIN_MM, max: SMOOTH_MAX_MM })}</small>}
+      {!off && (
         <label class="ws-check">
           <input type="checkbox" checked={props.keepCorners} onChange={(e) => props.onKeepCorners(e.currentTarget.checked)} /> {t("Keep sharp corners")}
         </label>
       )}
       {before !== null && after !== null && (
         <small class="ws-hint">
-          {level === "off"
+          {off
             ? tp(["{n} segment", "{n} segments"], before, { n: before.toLocaleString() })
-            : t("{before} → {after} segments: stair-steps and wobble smaller than the level are smoothed, tiny lines merged.", { before: before.toLocaleString(), after: after.toLocaleString() })}
+            : t("{before} → {after} segments: stair-steps and wobble smaller than the smoothing size are smoothed, tiny lines merged.", { before: before.toLocaleString(), after: after.toLocaleString() })}
         </small>
       )}
     </>

@@ -795,7 +795,10 @@ export const kk: Dictionary = {
   "Off": "Өшірулі",
   "Outline smoothing": "Контурларды тегістеу",
   "Strong (1 mm)": "Күшті (1 мм)",
-  "{before} → {after} segments: stair-steps and wobble smaller than the level are smoothed, tiny lines merged.": "Кесінділер: {before} → {after}: деңгейден кіші баспалдақтар мен бұдырлар тегістелді, ұсақ кесінділер біріктірілді.",
   "{n} segment": { one: "{n} кесінді", other: "{n} кесінді" },
   "Very strong (2 mm)": "Өте күшті (2 мм)",
+  "{before} → {after} segments: stair-steps and wobble smaller than the smoothing size are smoothed, tiny lines merged.": "Кесінділер: {before} → {after}: тегістеу өлшемінен кіші баспалдақтар мен бұдырлар тегістелді, ұсақ кесінділер біріктірілді.",
+  "Custom size…": "Өз өлшемі…",
+  "Smoothing size": "Тегістеу өлшемі",
+  "{min}–{max} mm, 0 turns smoothing off. Details and closed shapes smaller than this are smoothed away.": "{min}–{max} мм, 0 тегістеуді өшіреді. Осы өлшемнен кіші бөлшектер мен тұйық пішіндер тегістеліп жойылады.",
 };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Vec } from "../src/geom/geom";
-import { SMOOTH_MM, jaggedness, simplify, smoothImport, smoothPath, suggestedLevel } from "../src/import/smooth";
+import { SMOOTH_MM, clampSmoothMm, jaggedness, simplify, smoothImport, smoothPath, suggestedLevel } from "../src/import/smooth";
 import type { VecPath } from "../src/import/types";
 
 /** Axis-aligned stair-steps through the given points rounded to a `g` mm grid, like a traced pixel edge. */
@@ -135,6 +135,31 @@ describe("outline smoothing", () => {
       expect(jaggedness([{ ...p, points: out }]), `step ${g}`).toBeLessThan(0.05);
       for (const q of out) expect(Math.abs(Math.hypot(q.x - 30, q.y - 30) - 20), `step ${g}`).toBeLessThan(0.75 * g + 0.15);
     }
+  });
+
+  it("typed-in sizes are clamped, and 0 or nonsense turns smoothing off", () => {
+    expect(clampSmoothMm(0.3)).toBe(0.3);
+    expect(clampSmoothMm(0.333)).toBe(0.33);
+    expect(clampSmoothMm(0.01)).toBe(0.05);
+    expect(clampSmoothMm(50)).toBe(10);
+    expect(clampSmoothMm(0)).toBe(0);
+    expect(clampSmoothMm(-1)).toBe(0);
+    expect(clampSmoothMm(Number.NaN)).toBe(0);
+  });
+
+  it("any size works, not only the presets", () => {
+    const pix = pixelate(circle(30, 30, 20, 3000), 0.3);
+    for (const s of [0.8, 3]) {
+      const out = smoothPath(pix, true, { scale: s })!;
+      expect(jaggedness([{ points: out, closed: true, stroke: "#000000", fill: null }]), `size ${s}`).toBeLessThan(0.05);
+    }
+  });
+
+  it("a large size keeps a curve round (no invented corners)", () => {
+    const pix = pixelate(circle(30, 30, 20, 3000), 0.3);
+    const big = smoothPath(pix, true, { scale: 10 })!;
+    for (const q of big) expect(Math.abs(Math.hypot(q.x - 30, q.y - 30) - 20)).toBeLessThan(0.1);
+    expect(jaggedness([{ points: big, closed: true, stroke: "#000000", fill: null }])).toBe(0);
   });
 
   it("Douglas–Peucker keeps the ends and the far point", () => {

@@ -71,7 +71,8 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
   fill colour in the file with the layer colour it maps to (the nearest palette colour); change, merge or skip
   any of them. Filled shapes can be engraved, cut along their outline, or ignored. You can also set the scale and,
   for PDFs, the page. Text and embedded pictures are skipped with a warning (convert text to outlines first).
-- Outline smoothing (Off, Light 0.25 mm, Medium 0.5 mm, Strong 1 mm, Very strong 2 mm, at the finished size)
+- Outline smoothing (Off, Light 0.25 mm, Medium 0.5 mm, Strong 1 mm, Very strong 2 mm, or any size typed in
+  from 0.05 to 10 mm, at the finished size)
   removes stair-steps, zigzags and wobble smaller than the level, keeps sharp corners (optional), merges runs of
   tiny lines and drops specks. When a file looks jagged it starts at a level about 2.5 times its stair-step size.
   The dialog shows the segment count before and after.

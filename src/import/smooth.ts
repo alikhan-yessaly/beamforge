@@ -13,8 +13,18 @@ import type { VecPath, VectorImport } from "./types";
 
 export type SmoothLevel = "off" | "light" | "medium" | "strong" | "max";
 
-/** Smoothing scale per level, in mm of the finished size. */
+/** Smoothing scale per preset level, in mm of the finished size (any other value can be typed in). */
 export const SMOOTH_MM: Record<SmoothLevel, number> = { off: 0, light: 0.25, medium: 0.5, strong: 1, max: 2 };
+
+/** Limits for a typed-in smoothing size, mm. */
+export const SMOOTH_MIN_MM = 0.05;
+export const SMOOTH_MAX_MM = 10;
+
+/** A typed-in smoothing size made valid: 0 (off) or within the limits, to 0.01 mm. */
+export function clampSmoothMm(v: number): number {
+  if (!Number.isFinite(v) || v <= 0) return 0;
+  return Math.round(Math.min(SMOOTH_MAX_MM, Math.max(SMOOTH_MIN_MM, v)) * 100) / 100;
+}
 
 export interface SmoothOptions {
   /** Smoothing scale, mm. 0 = only drop duplicate points. */
@@ -83,7 +93,8 @@ function corners(pts: Vec[], closed: boolean, s: number, limit: number): number[
   const turn = pts.map((_, i) => {
     if (!closed && (at[i]! < s * 0.5 || total - at[i]! < s * 0.5)) return 0;
     const t1 = turnAt(i, s);
-    return t1 > limit && armTurn(i) > limit ? t1 : 0;
+    // Concentrated at the vertex: a corner turns nearly as much over half the distance, a curve only half as much.
+    return t1 > limit && armTurn(i) > limit && turnAt(i, s / 2) > 0.75 * t1 ? t1 : 0;
   });
   const out: number[] = [];
   for (let i = 0; i < n; i++) {

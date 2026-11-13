@@ -795,7 +795,10 @@ export const ru: Dictionary = {
   "Off": "Выкл.",
   "Outline smoothing": "Сглаживание контуров",
   "Strong (1 mm)": "Сильное (1 мм)",
-  "{before} → {after} segments: stair-steps and wobble smaller than the level are smoothed, tiny lines merged.": "Отрезков: {before} → {after}: ступеньки и неровности меньше уровня сглажены, мелкие отрезки объединены.",
   "{n} segment": { one: "{n} отрезок", few: "{n} отрезка", many: "{n} отрезков", other: "{n} отрезка" },
   "Very strong (2 mm)": "Очень сильное (2 мм)",
+  "{before} → {after} segments: stair-steps and wobble smaller than the smoothing size are smoothed, tiny lines merged.": "Отрезков: {before} → {after}: ступеньки и неровности меньше размера сглаживания сглажены, мелкие отрезки объединены.",
+  "Custom size…": "Свой размер…",
+  "Smoothing size": "Размер сглаживания",
+  "{min}–{max} mm, 0 turns smoothing off. Details and closed shapes smaller than this are smoothed away.": "{min}–{max} мм, 0 выключает сглаживание. Детали и замкнутые фигуры меньше этого размера сглаживаются до исчезновения.",
 };

@@ -1,7 +1,7 @@
 // Picture → traced vector paths: adjust, threshold (black & white) or reduce colours, trace each colour with
 // Potrace, scale to mm. Pure; runs in a worker (worker.ts) so the import dialog stays responsive.
 import { msg } from "../../i18n";
-import { SMOOTH_MM, type SmoothLevel, segmentCount, smoothImport } from "../smooth";
+import { SMOOTH_MM, segmentCount, smoothImport } from "../smooth";
 import type { Rgba, VecPath, VectorImport } from "../types";
 import { adjust, otsu, threshold, toGray } from "./preprocess";
 import { trace } from "./potrace";
@@ -24,8 +24,8 @@ export interface TraceSettings {
   turdSize: number;
   /** Corner smoothing, Potrace alphamax: 0 sharp corners … 1.33 all smooth. */
   smoothness: number;
-  /** Outline smoothing after tracing (removes leftover stair-steps and wobble). */
-  smooth: SmoothLevel;
+  /** Outline smoothing after tracing, mm (0 = off): removes leftover stair-steps and wobble smaller than this. */
+  smoothMm: number;
   /** Keep sharp corners while smoothing. */
   keepCorners: boolean;
   /** Traced shapes become engraved areas (fill) or outlines to cut. */
@@ -45,7 +45,7 @@ export const DEFAULT_TRACE: Omit<TraceSettings, "mmPerPx"> = {
   ignoreWhite: true,
   turdSize: 4,
   smoothness: 1,
-  smooth: "light",
+  smoothMm: SMOOTH_MM.light,
   keepCorners: true,
   result: "engrave",
 };
@@ -81,7 +81,7 @@ export function traceImage(img: Rgba, s: TraceSettings): TraceResult {
     q.palette.forEach((color, i) => emit(mask(q.index, i), color));
   }
   const before = segmentCount(paths);
-  const smoothed = smoothImport({ paths, warnings: [] }, { scale: SMOOTH_MM[s.smooth], cornerAngle: s.keepCorners ? undefined : 180 }).paths;
+  const smoothed = smoothImport({ paths, warnings: [] }, { scale: s.smoothMm, cornerAngle: s.keepCorners ? undefined : 180 }).paths;
   return {
     paths: smoothed,
     warnings: smoothed.length ? [] : [msg("The trace found no shapes: try another threshold, or invert.")],
