@@ -789,4 +789,13 @@ export const ru: Dictionary = {
   "Quality": "Качество",
   "The resolution is saved in the file, so other programs open it at the right size in mm.": "Разрешение записывается в файл, поэтому другие программы откроют его в правильном размере в мм.",
   "Exporting…": "Экспорт…",
+  "Keep sharp corners": "Сохранять острые углы",
+  "Light (0.25 mm)": "Слабое (0,25 мм)",
+  "Medium (0.5 mm)": "Среднее (0,5 мм)",
+  "Off": "Выкл.",
+  "Outline smoothing": "Сглаживание контуров",
+  "Strong (1 mm)": "Сильное (1 мм)",
+  "{before} → {after} segments: stair-steps and wobble smaller than the level are smoothed, tiny lines merged.": "Отрезков: {before} → {after}: ступеньки и неровности меньше уровня сглажены, мелкие отрезки объединены.",
+  "{n} segment": { one: "{n} отрезок", few: "{n} отрезка", many: "{n} отрезков", other: "{n} отрезка" },
+  "Very strong (2 mm)": "Очень сильное (2 мм)",
 };

@@ -34,6 +34,8 @@ simulator works without a machine.
   as sketches.
 - **Pictures:** trace PNG, JPEG, iPhone HEIC, BMP, GIF, WebP and AVIF pictures into vector shapes, in black and
   white or in colours, with a live preview. Each colour goes on its own layer.
+- **Smooth outlines:** jagged imports (pixel stair-steps, zigzags, wobble) are smoothed into clean curves and long
+  lines, so the laser doesn't stutter through hundreds of tiny moves. Sharp corners stay sharp.
 - **Export:** the selection or the whole drawing as SVG, DXF, PDF, PNG or JPEG, with a preview.
 - **Layers:** each colour is a layer that either cuts outlines or fills (engraves) areas, with its own speed,
   power and passes. The Fill tool engraves any closed area in a colour of its own.
@@ -69,13 +71,18 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
   fill colour in the file with the layer colour it maps to (the nearest palette colour); change, merge or skip
   any of them. Filled shapes can be engraved, cut along their outline, or ignored. You can also set the scale and,
   for PDFs, the page. Text and embedded pictures are skipped with a warning (convert text to outlines first).
+- Outline smoothing (Off, Light 0.25 mm, Medium 0.5 mm, Strong 1 mm, Very strong 2 mm, at the finished size)
+  removes stair-steps, zigzags and wobble smaller than the level, keeps sharp corners (optional), merges runs of
+  tiny lines and drops specks. When a file looks jagged it starts at a level about 2.5 times its stair-step size.
+  The dialog shows the segment count before and after.
 - CorelDRAW (`.cdr`) files are imported on a best-effort basis: the preview picture stored in the file is traced.
   For the real vectors, export SVG or PDF from CorelDRAW.
 - Pictures open a tracing dialog with a live preview:
   - Black & white: threshold (or automatic), brightness, contrast, blur and invert.
   - Colours: 2 to 8 colours, each on its own layer; the white background can be left out.
-  - Despeckle, corner smoothing, detail level, the width in millimetres, and whether traced shapes are engraved
-    or cut.
+  - Despeckle, corner smoothing, outline smoothing (Light by default), detail level, the width in millimetres, and
+    whether traced shapes are engraved or cut. Small pictures are enlarged smoothly before tracing, for cleaner
+    edges.
   - The picture can stay on the canvas as a reference. It is never sent to the machine.
 - **Export** (⌘E or right-click → Export…) writes the selection or everything as SVG (one Inkscape layer per
   colour), DXF, PDF (one layer per colour), PNG or JPEG, with a preview of the result.

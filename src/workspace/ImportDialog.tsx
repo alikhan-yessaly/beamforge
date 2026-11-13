@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { type ColorChoice, type FillsAs, buildObject, conflicts, defaultChoices, keptSize } from "../import/build";
 import type { PdfDoc } from "../import/pdf";
 import { type DecodedImage, keepableUrl, pixels } from "../import/raster";
+import { SMOOTH_MM, type SmoothLevel, segmentCount, smoothImport, suggestedLevel } from "../import/smooth";
 import { DEFAULT_TRACE, type TraceResult, type TraceSettings } from "../import/trace/pipeline";
 import type { Rgba, VectorImport } from "../import/types";
 import { PALETTE } from "../job/layers";
@@ -181,13 +182,17 @@ function drawPreview(c: HTMLCanvasElement | null, vi: VectorImport | null, targe
 // ---------- Vector files ----------
 
 function VectorBody({ req, finish }: { req: Extract<Request, { kind: "vector" }>; finish: (o: ImportOutcome | null) => void }) {
-  const [vi, setVi] = useState(req.vi);
+  const [raw, setVi] = useState(req.vi);
+  const [smooth, setSmooth] = useState<SmoothLevel>(() => suggestedLevel(req.vi.paths));
+  const [keepCorners, setKeepCorners] = useState(true);
   const [page, setPage] = useState(1);
   const [fills, setFills] = useState<FillsAs>("engrave");
   const [scalePct, setScalePct] = useState(100);
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
   const canvas = useRef<HTMLCanvasElement>(null);
   const d = doc.value;
+  // Smoothing works in mm of the finished size, so it follows the scale.
+  const vi = useMemo(() => smoothImport(raw, { scale: SMOOTH_MM[smooth] / (scalePct / 100), cornerAngle: keepCorners ? undefined : 180 }), [raw, smooth, keepCorners, scalePct]);
   const choices = useMemo(() => defaultChoices(vi, d).map((c) => (c.key in overrides ? { ...c, target: overrides[c.key]! } : c)), [vi, overrides]);
   const target = (key: string) => choices.find((c) => c.key === key)?.target ?? null;
   const clash = conflicts(choices, fills, d);
@@ -228,6 +233,7 @@ function VectorBody({ req, finish }: { req: Extract<Request, { kind: "vector" }>
             </small>
           </span>
         </label>
+        <SmoothControls level={smooth} keepCorners={keepCorners} onLevel={setSmooth} onKeepCorners={setKeepCorners} before={segmentCount(raw.paths)} after={segmentCount(vi.paths)} />
         <label>
           <span>{t("Filled shapes")}</span>
           <select value={fills} onChange={(e) => setFills(e.currentTarget.value as FillsAs)}>
@@ -295,7 +301,7 @@ function RasterBody({ req, finish }: { req: Extract<Request, { kind: "raster" }>
   const [error, setError] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
   const canvas = useRef<HTMLCanvasElement>(null);
-  const rgba = useMemo(() => pixels(img, detail), [img, detail]);
+  const rgba = useMemo(() => pixels(img, detail, 4), [img, detail]);
   const heightMm = (widthMm * img.height) / img.width;
   const set = (patch: Partial<typeof s>) => setS({ ...s, ...patch });
 
@@ -401,6 +407,14 @@ function RasterBody({ req, finish }: { req: Extract<Request, { kind: "raster" }>
             )}
             <Slider label={t("Despeckle")} min={0} max={100} value={s.turdSize} on={(v) => set({ turdSize: v })} />
             <Slider label={t("Smooth corners")} min={0} max={133} value={Math.round(s.smoothness * 100)} on={(v) => set({ smoothness: v / 100 })} />
+            <SmoothControls
+              level={s.smooth}
+              keepCorners={s.keepCorners}
+              onLevel={(v) => set({ smooth: v })}
+              onKeepCorners={(v) => set({ keepCorners: v })}
+              before={result?.segments.before ?? null}
+              after={result?.segments.after ?? null}
+            />
             <label>
               <span>{t("Detail")}</span>
               <select value={detail} onChange={(e) => setDetail(Number(e.currentTarget.value))}>
@@ -442,6 +456,45 @@ function RasterBody({ req, finish }: { req: Extract<Request, { kind: "raster" }>
           {t("Import")}
         </button>
       </div>
+    </>
+  );
+}
+
+const SMOOTH_LEVELS: { v: SmoothLevel; label: string }[] = [
+  { v: "off", label: msg("Off") },
+  { v: "light", label: msg("Light (0.25 mm)") },
+  { v: "medium", label: msg("Medium (0.5 mm)") },
+  { v: "strong", label: msg("Strong (1 mm)") },
+  { v: "max", label: msg("Very strong (2 mm)") },
+];
+
+/** Outline smoothing: level, corners, and what it did to the segment count. */
+function SmoothControls(props: { level: SmoothLevel; keepCorners: boolean; onLevel: (v: SmoothLevel) => void; onKeepCorners: (v: boolean) => void; before: number | null; after: number | null }) {
+  const { level, before, after } = props;
+  return (
+    <>
+      <label>
+        <span>{t("Outline smoothing")}</span>
+        <select value={level} onChange={(e) => props.onLevel(e.currentTarget.value as SmoothLevel)}>
+          {SMOOTH_LEVELS.map((l) => (
+            <option key={l.v} value={l.v}>
+              {t(l.label)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {level !== "off" && (
+        <label class="ws-check">
+          <input type="checkbox" checked={props.keepCorners} onChange={(e) => props.onKeepCorners(e.currentTarget.checked)} /> {t("Keep sharp corners")}
+        </label>
+      )}
+      {before !== null && after !== null && (
+        <small class="ws-hint">
+          {level === "off"
+            ? tp(["{n} segment", "{n} segments"], before, { n: before.toLocaleString() })
+            : t("{before} → {after} segments: stair-steps and wobble smaller than the level are smoothed, tiny lines merged.", { before: before.toLocaleString(), after: after.toLocaleString() })}
+        </small>
+      )}
     </>
   );
 }

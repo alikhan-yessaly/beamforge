@@ -789,4 +789,13 @@ export const kk: Dictionary = {
   "Quality": "Сапа",
   "The resolution is saved in the file, so other programs open it at the right size in mm.": "Ажыратымдылық файлға жазылады, сондықтан басқа бағдарламалар оны мм-де дұрыс өлшеммен ашады.",
   "Exporting…": "Экспорттау…",
+  "Keep sharp corners": "Үшкір бұрыштарды сақтау",
+  "Light (0.25 mm)": "Әлсіз (0,25 мм)",
+  "Medium (0.5 mm)": "Орташа (0,5 мм)",
+  "Off": "Өшірулі",
+  "Outline smoothing": "Контурларды тегістеу",
+  "Strong (1 mm)": "Күшті (1 мм)",
+  "{before} → {after} segments: stair-steps and wobble smaller than the level are smoothed, tiny lines merged.": "Кесінділер: {before} → {after}: деңгейден кіші баспалдақтар мен бұдырлар тегістелді, ұсақ кесінділер біріктірілді.",
+  "{n} segment": { one: "{n} кесінді", other: "{n} кесінді" },
+  "Very strong (2 mm)": "Өте күшті (2 мм)",
 };

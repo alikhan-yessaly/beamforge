@@ -26,9 +26,13 @@ export async function decodeImage(blob: Blob, name: string): Promise<DecodedImag
   return { bitmap, width: bitmap.width, height: bitmap.height, dpi: readDpi(bytes) };
 }
 
-/** The picture scaled to fit `maxSide` px (never enlarged), as RGBA pixels. */
-export function pixels(img: DecodedImage, maxSide: number): Rgba {
-  const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+/**
+ * The picture scaled to fit `maxSide` px, as RGBA pixels. Small pictures are enlarged up to `maxUpscale` times with
+ * smooth interpolation: tracing the enlargement follows the anti-aliased edges between pixels instead of the
+ * pixel stair-steps.
+ */
+export function pixels(img: DecodedImage, maxSide: number, maxUpscale = 1): Rgba {
+  const k = Math.min(Math.max(1, maxUpscale), maxSide / Math.max(img.width, img.height));
   const w = Math.max(1, Math.round(img.width * k)), h = Math.max(1, Math.round(img.height * k));
   const c = new OffscreenCanvas(w, h);
   const ctx = c.getContext("2d", { willReadFrequently: true })!;
