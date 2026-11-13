@@ -689,3 +689,20 @@ body > #workspace { height: 100%; border: 0; }
 .ws-conn-help-actions { align-items: center; }
 .ws .ws-units { height: var(--ctl-h-sm); min-width: 2.4rem; padding: 0 .45rem; border: 1px solid var(--ctl-border); border-radius: var(--ctl-radius); background: #fff; color: var(--ui-fg); font-size: .76rem; font-weight: 500; cursor: pointer; }
 .ws .ws-units:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Layer visibility vs job inclusion: words, not only opacity and dashes. */
+.ws .ws-ltag { flex: none; padding: 0 .3rem; border-radius: 999px; background: #eef1f5; color: var(--muted); font-size: .66rem; line-height: 1.5; white-space: nowrap; }
+.ws .ws-ltag.warn { background: #fef3c7; color: #92400e; }
+.ws .ws-lrow:has(.ws-lrow-tag) { flex-wrap: wrap; row-gap: 0; }
+.ws .ws-lrow-tag { flex-basis: 100%; padding-left: 2.6rem; line-height: 1; margin-top: -2px; }
+.ws .ws-inclusion { display: flex; flex-wrap: wrap; gap: .2rem .9rem; align-items: center; margin: .35rem 0 .2rem; }
+.ws .ws-inclusion .ws-check { color: var(--ui-fg); font-size: .8rem; }
+.ws .ws-inclusion .ws-hint { flex-basis: 100%; margin: 0; }
+.ws .ws-hint.warn { color: #92400e; }
+
+/* Text beside an icon for primary actions and the connection state. */
+.ws .ib .ib-text { line-height: 1.2; font-size: var(--ctl-font); white-space: nowrap; }
+.ws .ib:has(.ib-text) { padding: .3rem .55rem .3rem .45rem; }
+.ws .ws-machine-status.sim { background: #f5f3ff; border-color: #c4b5fd; color: #5b21b6; }
+.ws .ws-machine-status.sim svg { color: #7c3aed; }
+.ws .ws-sim-note { color: #5b21b6; }

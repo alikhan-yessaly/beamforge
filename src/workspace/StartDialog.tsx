@@ -58,7 +58,7 @@ export function StartDialog() {
           <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" /> {w}
         </p>
       ))}
-      <p>{t("Before starting, confirm that:")}</p>
+      <p>{t("The app can't check these. Before starting, confirm that:")}</p>
       <ul class="ws-checklist">
         {CHECKS.map((c) => (
           <li key={c}>{t(c)}</li>

@@ -19,6 +19,7 @@ import {
 } from "../app/connection";
 import { IconButton } from "../ui/icons";
 import { connHelpOpen } from "./ConnectionHelp";
+import { framing } from "./RunPanel";
 
 const KINDS: { kind: ConnKind; icon: typeof Usb; label: string }[] = [
   { kind: "usb", icon: Usb, label: msg("USB (Chrome or Edge)") },
@@ -37,11 +38,25 @@ export function machineText(): string {
   if (linkState.value === "verified") {
     return bedLoad.value.state === "ready" ? t("connected") : bedLoad.value.state === "error" ? t("bed size read failed") : t("reading bed size…");
   }
-  if (connBusy.value) return "connecting…";
+  if (connBusy.value) return t("connecting…");
   return linkState.value === "connected" ? t("connected, Card ID not verified") : t("disconnected");
 }
 
 const mm = (um: number) => (um / 1000).toFixed(1);
+
+/** Short visible text on the top-bar button, so the state reads without hovering or relying on colour. */
+function buttonText(state: MachineState): string {
+  if (connBusy.value) return t("Connecting…");
+  if (state === "off") return t("Connect");
+  if (connKind.value === "sim") return t("Simulator");
+  return state === "ok" ? t("Machine connected") : t("Machine: check");
+}
+
+/** Disconnecting closes the link only: a running job or frame carries on in the controller. */
+async function disconnect(): Promise<void> {
+  if (framing.value && !window.confirm(t("A frame is running. Disconnecting does not stop it. Disconnect anyway?"))) return;
+  await disconnectMachine();
+}
 
 export function ConnectButton() {
   const [open, setOpen] = useState(false);
@@ -65,26 +80,29 @@ export function ConnectButton() {
     };
   }, [open]);
 
-  const icon = state === "ok" ? PlugZap : state === "warn" ? TriangleAlert : Unplug;
+  const icon = connected && connKind.value === "sim" ? Monitor : state === "ok" ? PlugZap : state === "warn" ? TriangleAlert : Unplug;
   const pos = headPos.value;
   return (
     <div class="ws-connect" ref={ref}>
       <div class="ws-split">
         <IconButton
           icon={icon}
-          class={`ws-machine-status ${state}`}
+          class={`ws-machine-status ${state}${connected && connKind.value === "sim" ? " sim" : ""}`}
           label={connected ? t("Machine: {state}", { state: machineText() }) : t("Connect to the machine ({kind}); Card ID is checked automatically", { kind: t(KINDS.find((k) => k.kind === connKind.value)?.label ?? "") })}
           disabled={connBusy.value}
           onClick={() => (connected ? setOpen(!open) : void connectAndVerify().then((ok) => !ok && connProblem.value && setOpen(true)))}
-        />
+        >
+          <span class="ib-text">{buttonText(state)}</span>
+        </IconButton>
         <IconButton icon={ChevronDown} class="ws-split-more" label={t("Connection options")} pressed={open} onClick={() => setOpen(!open)} />
       </div>
       {open && (
         <div class="ws-popover" role="dialog" aria-label={t("Machine connection")}>
           <div class="ws-popover-head">
             <span class={`ws-dot ${state}`} />
-            <b>{t("Machine: {state}", { state: machineText() })}</b>
+            <b>{connKind.value === "sim" ? t("Simulator: {state}", { state: machineText() }) : t("Machine: {state}", { state: machineText() })}</b>
           </div>
+          {connected && connKind.value === "sim" && <p class="ws-hint ws-sim-note">{t("Simulated controller: no hardware moves and no laser fires. A job that runs here is not proof it is safe on a real machine.")}</p>}
           <div class="ws-segmented" role="group" aria-label={t("Connection type")}>
             {KINDS.map((k) => (
               <IconButton
@@ -129,7 +147,7 @@ export function ConnectButton() {
           )}
           <div class="ws-row">
             {connected ? (
-              <IconButton icon={Unplug} label={t("Disconnect")} onClick={() => void disconnectMachine()} />
+              <IconButton icon={Unplug} label={t("Disconnect")} onClick={() => void disconnect()} />
             ) : (
               <>
                 <IconButton icon={Plug} class="ws-primary" label={t("Connect and verify the Card ID")} disabled={connBusy.value} onClick={() => void connectAndVerify()} />

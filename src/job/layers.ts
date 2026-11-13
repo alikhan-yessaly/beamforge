@@ -29,6 +29,16 @@ export function activeLayers(doc: Doc): Layer[] {
   return [...stored, ...fresh];
 }
 
+/**
+ * What a layer contributes to the job, independent of how it is drawn: "included" (visible and in the job),
+ * "hiddenIncluded" (hidden on the canvas but still cut or engraved) or "excluded" (Output off, never runs).
+ */
+export type LayerJobState = "included" | "hiddenIncluded" | "excluded";
+export function layerJobState(l: Pick<Layer, "show" | "output">): LayerJobState {
+  if (!l.output) return "excluded";
+  return l.show === false ? "hiddenIncluded" : "included";
+}
+
 /** A view of the document containing only visible paths, without changing its cut settings. */
 export function visibleDocument(doc: Doc): Doc {
   const hidden = new Set((doc.layers ?? []).filter((l) => l.show === false).map((l) => l.color));

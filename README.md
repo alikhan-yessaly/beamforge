@@ -44,10 +44,11 @@ simulator works without a machine.
   power and passes. The Fill tool engraves any closed area in a colour of its own.
 - **Job planning:** fills always run before the cuts around them. Jobs run object by object, layer by layer, or
   whichever travels less. A toolpath preview and a time estimate show the result before anything runs.
-- **Device mode:** a read-only view of the prepared job, with its time, size and cut order. From here you can
+- **Device mode:** a review of the prepared job, with its time, size and cut order. The drawing is locked here, but
+  the start point, order and suggested fixes can still change, and the plan updates at once. From here you can
   frame, start, pause and stop the job, or save it in the controller's memory to start later from the machine's
   panel.
-- **Machine tuning:** keep several machine profiles, matched to the connected controller automatically. Pick a
+- **Machine tuning:** keep several machine profiles, matched to the connected controller by Card ID and bed size. Pick a
   machine class for typical values, then tune it with guided test cards (engraving evenness, scan offset, power and
   speed, kerf) that you read back by clicking a drawing of the card.
 - **Even engraving:** before a job, the app predicts where engraving will burn deeper (row ends, small letters) and
@@ -151,6 +152,9 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
 
 - Each colour is a layer that **cuts** or **fills**. Each layer has its own speed, power, passes and corner power;
   the corner power is how the Ruida lowers power at slow corners.
+- Each layer is **Visible on canvas** (eye) and **Included in job** (bolt) separately. A layer that is hidden but
+  still included is tagged *hidden · in job* (it is still cut or engraved), and an excluded one *not in job*; the
+  Job tab, Start and .rd export say the same.
 - Fill patterns: lines, cross-hatch, dots and offset contours, with spacing and angle. Holes stay empty.
 - The **Fill tool** engraves the inside of any closed shape in its own colour, so "engrave the face, then cut the
   part out" takes two colours with separate settings.
@@ -188,8 +192,9 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
 
 ### Machine profiles and tuning
 
-- Keep several **machine profiles**. On connect the app picks the one that belongs to the controller (Card ID and
-  bed size) and asks when that's unclear.
+- Keep several **machine profiles**. Each remembers the Card ID and bed size it was used with; on connect the app
+  switches to the profile that matches and asks when several match. A Card ID names the controller model, not an
+  individual machine, so two machines of the same model look alike: confirm which one you're at.
 - A new profile asks its **machine class** (40–60 W desktop, 60–100 W, 100–150 W large bed, or other), which sets
   typical acceleration, start speed and lowest firing power. These are starting values, not measurements.
 - **Tuning** (Machine tab) is a guided, skippable wizard with four test cards, each placed near the home corner on
@@ -198,17 +203,17 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
   - **Scan offset:** the shift that lines up back-and-forth rows, per speed.
   - **Power and speed:** a grid whose chosen squares become the material's presets.
   - **Kerf:** holes and a peg; the snug hole gives the kerf.
-- Before a job, **Before you start** in Device mode lists layers predicted to engrave unevenly, with each fix's
-  time cost; one click applies it.
+- Before a job, **Suggestions (optional)** in Device mode lists layers predicted to engrave unevenly, with each
+  fix's time cost; one click changes that layer's settings. Blocking problems are listed separately, first.
 - **Advanced** mode (status bar) shows every raw value. A machine's tuning and materials save as a `.beamtune` file.
 
 ### Device mode and running jobs
 
-- **Prepare job** plans the job and switches to **Device** mode: a read-only preview, the job summary, the order
-  and the layer order (↑/↓ to change it).
+- **Prepare job** plans the job and switches to **Device** mode: the toolpath preview with the drawing locked, the
+  job summary, which layers are in the job, the order and the layer order (↑/↓ to change it).
 - **Start from** places the job either at the drawing's position on the bed, or at the head's current position.
-- **Frame** traces the job's outline with the laser off.
-- **Start** first shows a checklist: the job time, any warnings and the safety reminders. **Pause/Resume** and
+- **Frame** traces the job's outline with the laser off. Once started it runs to the end: software Stop can't halt it.
+- **Start** first shows a checklist: the estimated job time, any warnings and the physical checks the app can't verify. **Pause/Resume** and
   the software **Stop** (Esc) control a running job, and a progress bar follows it.
 - **Save to machine** stores the job in the controller's memory under a name, like LightBurn's Send, so it can
   be started later from the machine's panel. The stored files are listed, and you can delete them.
@@ -218,7 +223,10 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
 
 - Connections:
   - **USB:** Web Serial in Chrome or Edge.
-  - **Simulator:** a simulated RDC644XS that runs jobs, moves and jogs in real time.
+  - **Simulator:** a simulated RDC644XS that runs jobs, moves and jogs in real time. While it is connected, the
+    connection button reads **Simulator** (violet), so it is never mistaken for hardware.
+- The connection button (top right) shows its state as text: **Connect**, **Machine connected**, **Machine: check**
+  or **Simulator**. Disconnecting only closes the link; a running job or frame carries on, and the app asks first.
   - **Dev bridge:** a local WebSocket bridge for browsers without Web Serial, and for scripts.
 - Nothing except a read-only Card ID query is sent until the controller's reply decodes correctly, which confirms
   the model setting.
@@ -282,7 +290,7 @@ npm run dev
 Open the localhost URL printed by Vite (or the [beta site](https://alikhan-yessaly.github.io/beamforge/)). The
 welcome screen asks for the language and the kind of machine; choose **Try the simulator** to explore without
 hardware, then follow the **Getting started** checklist in the status bar: prepare the sample job, connect, frame
-and start. Later, the connection menu next to the plug icon (top right) switches between USB and the simulator.
+and start. Later, the connection menu next to the **Connect** button (top right) switches between USB and the simulator.
 
 Run `npm test` and `npm run build` to validate changes.
 

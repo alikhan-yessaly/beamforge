@@ -73,7 +73,7 @@ function App() {
       {!sketching && <Notices />}
       <div class={`ws-top${sketching && connected && !running ? " ws-sketch-stop-space" : ""}`}>
         {!sketching && <ModeSwitch />}
-        {sketching ? <SketchToolbar /> : device ? <span class="ws-device-title">{t("Device: a read-only preview of the prepared job")}</span> : <Toolbar />}
+        {sketching ? <SketchToolbar /> : device ? <span class="ws-device-title">{t("Device: the drawing is locked here. Start point, order and suggested fixes can still change; the plan and estimate update at once.")}</span> : <Toolbar />}
         {!sketching && <LangSwitch />}
         {!sketching && <ConnectButton />}
       </div>

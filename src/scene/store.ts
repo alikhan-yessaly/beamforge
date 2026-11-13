@@ -134,7 +134,7 @@ export async function identifyController(cardId: number, bedW: number, bedH: num
   if (!matches.some((m) => m.id === active.id)) {
     if (matches.length === 1) {
       profile.value = matches[0]!;
-      notify(t("Switched to the machine profile \"{name}\": it matches the connected controller.", { name: matches[0]!.name }));
+      notify(t("Switched to the machine profile \"{name}\": its saved Card ID and bed size match this controller. The Card ID names the model, not the machine, so check it's the right one.", { name: matches[0]!.name }));
     } else if (matches.length > 1) {
       const id = await new Promise<string | null>((resolve) => (machinePrompt.value = { kind: "choose", ids: matches.map((m) => m.id!), resolve }));
       if (id) selectMachine(id);

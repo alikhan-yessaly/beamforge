@@ -3,7 +3,7 @@ import { signal } from "@preact/signals";
 import { Pause, Play, RefreshCw, Route, SquareDashed, Timer } from "lucide-preact";
 import { StartFromBed, StartFromHead } from "../ui/customIcons";
 import { IconButton } from "../ui/icons";
-import { bedLoad, linkState, motion, refreshBedDimensions, runner } from "../app/connection";
+import { bedLoad, connKind, linkState, motion, refreshBedDimensions, runner } from "../app/connection";
 import { frameJob } from "../controller/frame";
 import { type JobProgress, inspectJob } from "../controller/jobRunner";
 import { StoppedError } from "../controller/motion";
@@ -65,12 +65,12 @@ async function start(): Promise<void> {
   const bounds = inspectJob(job.commands);
   const offset = job.mode === "current" && (bounds.min.x > 0 || bounds.min.y > 0);
   const warnings = [
-    ...(hidden ? [tp(["{n} dotted (hidden) output layer will also be cut.", "{n} dotted (hidden) output layers will also be cut."], hidden)] : []),
+    ...(hidden ? [tp(["{n} layer hidden on the canvas is included in the job and will run.", "{n} layers hidden on the canvas are included in the job and will run."], hidden)] : []),
     ...(offset ? [t("The output is offset from the visible job reference; this placement is untested on a real controller. Frame and check first.")] : []),
     ...toolpath.value.warnings,
   ];
   const ok = await confirmStart({
-    time: formatDuration(jobEstimate.value.total),
+    time: `~${formatDuration(jobEstimate.value.total)}`,
     layers: toolpath.value.layers.length,
     where: job.mode === "current" ? t("from the head's current position") : t("at its place on the bed"),
     warnings,
@@ -116,7 +116,7 @@ const PHASE: Record<string, string> = { checking: msg("checking"), sending: msg(
 
 /** Why Frame/Start can't run right now, or null when they can. */
 function blockReason(): { text: string; retry?: boolean } | null {
-  if (linkState.value === "disconnected") return { text: t("Connect to the machine (plug icon, top right) to frame or start.") };
+  if (linkState.value === "disconnected") return { text: t("Connect to the machine or the simulator (Connect, top right) to frame or start.") };
   if (linkState.value === "connected") return { text: t("Connected, but the Card ID hasn't been verified (check the controller model in the Machine tab, developer mode).") };
   if (bedLoad.value.state === "loading" || bedLoad.value.state === "idle") return { text: t("Reading the machine's bed size…") };
   if (bedLoad.value.state === "error") return { text: bedLoad.value.message, retry: true };
@@ -138,7 +138,7 @@ export function RunPanel() {
     <section class="ws-run">
       <div class="ws-run-details" title={t("Estimated job time · cut {cut} m · travel {travel} m", { cut: fmtM(est.cutLength), travel: fmtM(est.travelLength) })}>
         <Timer size={16} strokeWidth={1.75} aria-hidden="true" />
-        <span>{formatDuration(est.total)}</span>
+        <span aria-label={t("Estimated job time")}>~{formatDuration(est.total)}</span>
         <IconButton icon={Route} label={t("Preview the toolpath (P)")} pressed={preview.value.on} disabled={toolpath.value.segments.length === 0} onClick={togglePreview} />
       </div>
       <div class="ws-run-controls">
@@ -147,12 +147,20 @@ export function RunPanel() {
           label={`${t("Frame at {speed} mm/s: trace the job's outline with the laser off (smooth; can't be stopped from the app)", { speed: profile.value.frameSpeed ?? 30 })}${why}`}
           disabled={!!block || busy}
           onClick={() => void frame()}
-        />
-        <IconButton icon={Play} class="ws-start" label={`${t("Start the job (fires the laser; confirmation comes first)")}${why}`} disabled={!!block || busy} onClick={() => void start()} />
+        >
+          <span class="ib-text">{t("Frame")}</span>
+        </IconButton>
+        <IconButton icon={Play} class="ws-start" label={`${t("Start the job (fires the laser; confirmation comes first)")}${why}`} disabled={!!block || busy} onClick={() => void start()}>
+          <span class="ib-text">{t("Start")}</span>
+        </IconButton>
         {p?.phase === "paused" && live ? (
-          <IconButton icon={Play} label={t("Resume")} onClick={() => void runner.resume().catch((e) => notify(errText(e), "error"))} />
+          <IconButton icon={Play} label={t("Resume")} onClick={() => void runner.resume().catch((e) => notify(errText(e), "error"))}>
+            <span class="ib-text">{t("Resume")}</span>
+          </IconButton>
         ) : (
-          <IconButton icon={Pause} label={t("Pause")} disabled={!live || p?.phase !== "running"} onClick={() => void runner.pause().catch((e) => notify(errText(e), "error"))} />
+          <IconButton icon={Pause} label={t("Pause")} disabled={!live || p?.phase !== "running"} onClick={() => void runner.pause().catch((e) => notify(errText(e), "error"))}>
+            <span class="ib-text">{t("Pause")}</span>
+          </IconButton>
         )}
       </div>
       <div class="ws-run-status">
@@ -177,7 +185,7 @@ export function RunPanel() {
         ) : p?.phase === "done" || p?.phase === "stopped" ? (
           <small>{p.phase === "done" ? t("Last job done after {time}.", { time: formatDuration(p.elapsed) }) : t("Last job stopped after {time}.", { time: formatDuration(p.elapsed) })}</small>
         ) : (
-          <small>{t("Ready.")}</small>
+          <small>{connKind.value === "sim" ? t("Ready: simulator, no hardware moves.") : t("Ready. Once started, a frame runs to the end: software STOP can't halt it.")}</small>
         )}
       </div>
     </section>

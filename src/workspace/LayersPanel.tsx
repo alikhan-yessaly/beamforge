@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { IconButton, IconToggle } from "../ui/icons";
 import { buildRdFile } from "../job/build";
 import { formatDuration } from "../job/estimate";
-import { activeLayers, moveLayer, powerLinked, updateLayer } from "../job/layers";
+import { activeLayers, layerJobState, moveLayer, powerLinked, updateLayer } from "../job/layers";
 import { type Layer, type LayerMode, type SweepMode, newId } from "../scene/model";
 import { overscanLength, startSpeedOf, suggestCornerPower } from "../machine/motion";
 import { uneven } from "../job/depth";
@@ -183,6 +183,7 @@ function LayerRow(props: { layer: Layer; index: number; count: number; seconds: 
   const set = (patch: Partial<Omit<Layer, "color">>) => commit(updateLayer(doc.value, l.color, patch));
   const mode = l.mode ?? "cut";
   const ModeIcon = MODE_ICON[mode];
+  const job = layerJobState(l);
   const power = l.minPower === l.maxPower ? `${num2(l.maxPower)} %` : `${num2(l.maxPower)}/${num2(l.minPower)} %`;
   return (
     <li
@@ -199,8 +200,8 @@ function LayerRow(props: { layer: Layer; index: number; count: number; seconds: 
         <small>mm/s</small> {power}
         {l.passes > 1 && <small> ×{l.passes}</small>}
       </span>
-      <IconToggle on={l.show !== false} onIcon={Eye} offIcon={EyeOff} label={t("Show (off = dotted shadow; shown paths set the current-head job reference)")} onChange={(show) => set({ show })} />
-      <IconToggle on={l.output} onIcon={Zap} offIcon={ZapOff} label={t("Output (cut this layer)")} onChange={(output) => set({ output })} />
+      <IconToggle on={l.show !== false} onIcon={Eye} offIcon={EyeOff} label={t("Visible on canvas (off: dotted shadow, still in the job if included; visible paths set the current-head job reference)")} onChange={(show) => set({ show })} />
+      <IconToggle on={l.output} onIcon={Zap} offIcon={ZapOff} label={t("Included in job (off: this layer is not cut or engraved)")} onChange={(output) => set({ output })} />
       <small class="ws-lrow-time" title={t("Estimated time for this layer")}>
         {props.seconds !== null ? formatDuration(props.seconds) : "—"}
       </small>
@@ -208,6 +209,15 @@ function LayerRow(props: { layer: Layer; index: number; count: number; seconds: 
         <IconButton icon={ChevronUp} label={t("Cut earlier")} disabled={props.index === 0} onClick={() => commit(moveLayer(doc.value, l.color, -1))} />
         <IconButton icon={ChevronDown} label={t("Cut later")} disabled={props.index === props.count - 1} onClick={() => commit(moveLayer(doc.value, l.color, 1))} />
       </span>
+      {job !== "included" && (
+        <span class="ws-lrow-tag">
+          {job === "hiddenIncluded" ? (
+            <span class="ws-ltag warn" title={t("Hidden on the canvas, but this layer is still cut or engraved")}>{t("hidden · in job")}</span>
+          ) : (
+            <span class="ws-ltag" title={t("Output is off: this layer is not cut or engraved")}>{t("not in job")}</span>
+          )}
+        </span>
+      )}
     </li>
   );
 }
@@ -272,6 +282,26 @@ function FillMotionRows(props: { layer: Layer; set: (patch: Partial<Omit<Layer, 
   );
 }
 
+/** The selected layer's canvas visibility and job inclusion, in words, with what the combination does. */
+function JobInclusion(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "color">>) => void }) {
+  const l = props.layer;
+  const job = layerJobState(l);
+  return (
+    <div class="ws-inclusion">
+      <label class="ws-check">
+        <input type="checkbox" checked={l.show !== false} onChange={(e) => props.set({ show: e.currentTarget.checked })} />
+        <Eye size={14} strokeWidth={1.75} aria-hidden="true" /> {t("Visible on canvas")}
+      </label>
+      <label class="ws-check">
+        <input type="checkbox" checked={l.output} onChange={(e) => props.set({ output: e.currentTarget.checked })} />
+        <Zap size={14} strokeWidth={1.75} aria-hidden="true" /> {t("Included in job")}
+      </label>
+      {job === "hiddenIncluded" && <p class="ws-hint warn">{t("Hidden but still included: this layer will be cut or engraved. Untick “Included in job” to leave it out.")}</p>}
+      {job === "excluded" && <p class="ws-hint">{t("Not included: this layer won't be cut or engraved, and it isn't in the time estimate.")}</p>}
+    </div>
+  );
+}
+
 /** All settings of the selected layer. */
 function LayerEditor(props: { layer: Layer; index: number }) {
   const l = props.layer;
@@ -286,6 +316,7 @@ function LayerEditor(props: { layer: Layer; index: number }) {
         <small>{l.color}</small>
         <PowerRamp min={l.minPower} max={l.maxPower} speed={l.speed} start={startSpeedOf(p)} />
       </div>
+      <JobInclusion layer={l} set={set} />
       <ModeRows layer={l} set={set} />
       <MaterialRow layer={l} set={set} />
       <div class="ws-layer-fields">
@@ -315,7 +346,7 @@ function saveRd(): void {
   try {
     const bytes = buildRdFile(doc.value, profile.value, { mode: pr.startFrom, innerFirst: pr.innerFirst, order: pr.jobOrder });
     const hidden = activeLayers(doc.value).filter((l) => l.output && l.show === false);
-    if (hidden.length && !window.confirm(tp(["This file includes {n} dotted output layer. Dotted layers are still cut. Save it anyway?", "This file includes {n} dotted output layers. Dotted layers are still cut. Save it anyway?"], hidden.length))) return;
+    if (hidden.length && !window.confirm(tp(["This file includes {n} layer that is hidden on the canvas but included in the job: it will be cut or engraved. Save it anyway?", "This file includes {n} layers that are hidden on the canvas but included in the job: they will be cut or engraved. Save it anyway?"], hidden.length))) return;
     const name = (doc.value.objects[0]?.name ?? "job").replace(/\.dxf$/i, "");
     const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/octet-stream" }));
     const a = Object.assign(document.createElement("a"), { href: url, download: `${name}.rd` });

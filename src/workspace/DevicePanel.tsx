@@ -7,7 +7,7 @@ import { ArrowRight, ChevronDown, ChevronUp, HardDriveDownload, PencilRuler, Ref
 import { linkState, link } from "../app/connection";
 import { deleteFileOnController, listFiles, saveJobToController } from "../controller/files";
 import { formatDuration } from "../job/estimate";
-import { activeLayers, moveLayer } from "../job/layers";
+import { activeLayers, layerJobState, moveLayer } from "../job/layers";
 import type { JobOrder } from "../job/plan";
 import { FILE_NAME_MAX, normalizeFileName } from "../protocol/encode";
 import { project } from "../project/state";
@@ -47,7 +47,7 @@ export function PrepareBar() {
     <section class="ws-run">
       <div class="ws-run-details">
         <Timer size={16} strokeWidth={1.75} aria-hidden="true" />
-        <span>{formatDuration(est.total)}</span>
+        <span aria-label={t("Estimated job time")}>~{formatDuration(est.total)}</span>
         <IconButton icon={Route} label={t("Preview the toolpath (P)")} pressed={preview.value.on} disabled={toolpath.value.segments.length === 0} onClick={togglePreview} />
       </div>
       <div class="ws-run-status">{problem ? <small>{problem}</small> : <small>{t("Ready to prepare.")}</small>}</div>
@@ -104,8 +104,13 @@ function JobSummary() {
     <section class="ws-panel ws-job-summary">
       <h3>{t("Job")}</h3>
       <p class="ws-job-name">{project.value.name}</p>
+      {tp_.errors.map((e) => (
+        <p key={e} class="ws-plan-msg error" role="alert">
+          <b>{t("Blocks the job:")}</b> {e}
+        </p>
+      ))}
       <dl class="ws-job-facts">
-        <dt>{t("Time")}</dt>
+        <dt>{t("Estimated time")}</dt>
         <dd>~{formatDuration(est.total)}</dd>
         {box && (
           <>
@@ -132,7 +137,7 @@ function JobSummary() {
           ))}
         </select>
       </div>
-      <h3>{tp(["{n} layer", "{n} layers"], tp_.layers.length)}</h3>
+      <h3>{tp(["{n} layer in the job", "{n} layers in the job"], tp_.layers.length)}</h3>
       <table class="ws-job-layers">
         <tbody>
           {tp_.layers.map((l, i) => (
@@ -153,12 +158,31 @@ function JobSummary() {
           ))}
         </tbody>
       </table>
+      <Inclusion />
       {tp_.warnings.map((w) => (
         <p key={w} class="ws-plan-msg">
           <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" /> {w}
         </p>
       ))}
     </section>
+  );
+}
+
+/** Layers the job leaves out, and hidden layers it still runs: the table above lists only what runs. */
+function Inclusion() {
+  const all = activeLayers(doc.value);
+  const no = (c: string) => String(all.findIndex((l) => l.color === c) + 1).padStart(2, "0");
+  const excluded = all.filter((l) => layerJobState(l) === "excluded");
+  const hidden = all.filter((l) => layerJobState(l) === "hiddenIncluded");
+  return (
+    <>
+      {hidden.length > 0 && (
+        <p class="ws-plan-msg">
+          <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" /> {t("Hidden on the canvas but included: layer {list}.", { list: hidden.map((l) => no(l.color)).join(", ") })}
+        </p>
+      )}
+      {excluded.length > 0 && <p class="ws-hint">{t("Not included in this job: layer {list}.", { list: excluded.map((l) => no(l.color)).join(", ") })}</p>}
+    </>
   );
 }
 
@@ -198,7 +222,8 @@ function JobChecks() {
   const hide = (c: Check) => (hiddenChecks.value = new Set([...hiddenChecks.value, c.id]));
   return (
     <section class="ws-panel ws-checks">
-      <h3>{t("Before you start")}</h3>
+      <h3>{t("Suggestions (optional)")}</h3>
+      <p class="ws-hint">{t("These don't block the job. A fix changes that layer's settings; the plan and estimate update right away (Undo in Prepare reverts it).")}</p>
       {checks.map((c) => (
         <div key={c.id} class="ws-check-card">
           <p>
