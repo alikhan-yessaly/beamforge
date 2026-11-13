@@ -1,5 +1,5 @@
 import { msg, t } from "../i18n";
-import { Layers, PanelRightClose, PanelRightOpen, SwatchBook } from "lucide-preact";
+import { ClipboardList, Layers, PanelRightClose, PanelRightOpen, SwatchBook } from "lucide-preact";
 import { render } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { selection } from "../scene/store";
@@ -23,15 +23,21 @@ import { StartDialog } from "./StartDialog";
 import { SketchToolbar } from "./sketch/SketchToolbar";
 import { session as sketchSession } from "./sketch/state";
 import { ShortcutSheet } from "./ShortcutSheet";
+import { DevicePanel, ModeSwitch, PrepareBar } from "./DevicePanel";
+import { appMode } from "./mode";
 
-const TABS = [
-  { name: "layers", icon: Layers, label: msg("Layers and objects") },
-  { name: "materials", icon: SwatchBook, label: msg("Material library") },
-  { name: "machine", icon: LaserCutter, label: msg("Machine: position, jog and profile") },
-] as const;
+type Tab = "layers" | "materials" | "machine" | "job";
+const TABS: { name: Tab; icon: typeof Layers; label: string; device: boolean }[] = [
+  { name: "layers", icon: Layers, label: msg("Layers and objects"), device: false },
+  { name: "materials", icon: SwatchBook, label: msg("Material library"), device: false },
+  { name: "job", icon: ClipboardList, label: msg("Job: summary and Save to machine"), device: true },
+  { name: "machine", icon: LaserCutter, label: msg("Machine: position, jog and profile"), device: true },
+];
 
 function App() {
-  const [tab, setTab] = useState<"layers" | "materials" | "machine">("layers");
+  const [tab, setTab] = useState<Tab>("layers");
+  const device = appMode.value === "device";
+  useEffect(() => setTab((current) => (device ? (current === "machine" ? current : "job") : current === "job" ? "layers" : current)), [device]);
   const [sidebar, setSidebar] = useState(true);
   const stop = useRef<HTMLDivElement>(null);
   const [machineContent] = useState(() => document.getElementById("machine-content"));
@@ -53,7 +59,8 @@ function App() {
         </div>
       )}
       <div class={`ws-top${sketching && connected && !running ? " ws-sketch-stop-space" : ""}`}>
-        {sketching ? <SketchToolbar /> : <Toolbar />}
+        {!sketching && <ModeSwitch />}
+        {sketching ? <SketchToolbar /> : device ? <span class="ws-device-title">{t("Device: a read-only preview of the prepared job")}</span> : <Toolbar />}
         {!sketching && <LangSwitch />}
         {!sketching && <ConnectButton />}
       </div>
@@ -61,7 +68,7 @@ function App() {
         <Canvas />
         <aside class={`ws-side${sidebar ? "" : " collapsed"}`} id="workspace-sidebar" hidden={sketching}>
           <nav class="ws-tabs" aria-label={t("Workspace panels")}>
-            {TABS.map(({ name, icon, label }) => (
+            {TABS.filter((x) => !device || x.device).map(({ name, icon, label }) => (
               <IconButton
                 key={name}
                 icon={icon}
@@ -84,14 +91,15 @@ function App() {
             <ObjectsPanel />
           </div>
           <div hidden={tab !== "materials"}><MaterialsPanel /></div>
+          {device && tab === "job" && <DevicePanel />}
           <MachineTab visible={!sketching && sidebar && tab === "machine"} content={machineContent} />
           </div>
         </aside>
       </div>
-      {!sketching && <PaletteBar />}
+      {!sketching && !device && <PaletteBar />}
       {!sketching && <StatusBar />}
       <div class={`ws-jobbar${sketching && !running ? " ws-sketch-stop" : ""}`} hidden={sketching && !connected && !running}>
-        <div class="ws-run-slot" hidden={sketching && !running}><RunPanel /></div>
+        <div class="ws-run-slot" hidden={sketching && !running}>{device || running ? <RunPanel /> : <PrepareBar />}</div>
         <div ref={stop} class="ws-stop-slot" />
       </div>
       <Toasts />

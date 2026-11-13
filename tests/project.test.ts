@@ -37,7 +37,7 @@ describe(".laserproj", () => {
 
   it("fills in defaults for missing optional parts and names projects from file names", () => {
     const p = parseProject(JSON.stringify({ format: "laserproj", version: 1, doc: { objects: [] } }));
-    expect(p.job).toEqual({ startFrom: "absolute", innerFirst: true });
+    expect(p.job).toEqual({ startFrom: "absolute", innerFirst: true, order: "auto" });
     expect(p.doc.layers).toEqual([]);
     expect(projectName("plate.laserproj")).toBe("plate");
     expect(projectName(".laserproj")).toBe("Untitled");

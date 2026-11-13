@@ -1,3 +1,4 @@
+import type { JobOrder } from "../job/plan";
 import { computed, effect, signal } from "@preact/signals";
 import { selectionBox } from "./ops";
 import { type Anchor, DEFAULT_PROFILE, type Doc, type MachineProfile } from "./model";
@@ -33,11 +34,13 @@ export interface Prefs {
   innerFirst: boolean;
   /** Job placement: where the design sits on the bed, or relative to the head when the job starts. */
   startFrom: "absolute" | "current";
+  /** Job order: layer by layer, object by object, or whichever travels less. */
+  jobOrder: JobOrder;
 }
 
 export const doc = signal<Doc>(migrateDoc(load<Doc>(DOC_KEY, { objects: [], layers: [] })));
 export const profile = signal<MachineProfile>(load(PROFILE_KEY, DEFAULT_PROFILE));
-export const prefs = signal<Prefs>(load(PREFS_KEY, { snapToGrid: false, gridStep: 10, anchor: { fx: 0, fy: 0 }, lockAspect: true, innerFirst: true, startFrom: "absolute" }));
+export const prefs = signal<Prefs>(load(PREFS_KEY, { snapToGrid: false, gridStep: 10, anchor: { fx: 0, fy: 0 }, lockAspect: true, innerFirst: true, startFrom: "absolute", jobOrder: "auto" }));
 export const selection = signal<ReadonlySet<string>>(new Set());
 export const messages = signal<{ id: number; text: string; kind: "info" | "warn" | "error" }[]>([]);
 /** Cursor position in internal bed mm, or null when the pointer is outside the canvas. */

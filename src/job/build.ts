@@ -3,7 +3,7 @@
 import { t } from "../i18n";
 import { type RdJobInput, type RdLayer, type PointUm, encodeJob } from "../protocol/jobEncode";
 import { type Doc, type MachineProfile, toUser } from "../scene/model";
-import { type Toolpath, planToolpath } from "./plan";
+import { type JobOrder, type Toolpath, planToolpath } from "./plan";
 import { apply } from "../geom/geom";
 import { visibleDocument } from "./layers";
 
@@ -15,6 +15,8 @@ export interface BuildOptions {
    */
   mode: "absolute" | "current";
   innerFirst: boolean;
+  /** Default "auto". */
+  order?: JobOrder;
 }
 
 export interface BuiltJob {
@@ -49,12 +51,14 @@ export function designOrigin(doc: Doc, profile: MachineProfile): PointUm | null 
 
 export function buildJob(doc: Doc, profile: MachineProfile, opts: BuildOptions): BuiltJob {
   const home = { x: profile.origin.endsWith("right") ? profile.bedW : 0, y: profile.origin.startsWith("bottom") ? profile.bedH : 0 };
-  const tp = planToolpath(doc, { start: home, innerFirst: opts.innerFirst });
+  const tp = planToolpath(doc, { start: home, innerFirst: opts.innerFirst, order: opts.order });
   if (tp.errors.length) throw new Error(tp.errors.join(" "));
   if (!tp.segments.some((s) => s.cut)) throw new Error(t("Nothing to cut: no layer with output on has any paths"));
 
   // Segments → per-layer paths. A cut that doesn't continue from the previous cut starts a new path.
   const layers: RdLayer[] = tp.layers.map((l) => ({ speed: l.speed, minPower: l.minPower, maxPower: l.maxPower, color: l.color, paths: [] }));
+  // Runs of consecutive paths on one layer, in cut order (object-by-object jobs switch layers back and forth).
+  const blocks: { layer: number; paths: PointUm[][] }[] = [];
   let path: PointUm[] | null = null;
   let last: { li: number; x: number; y: number } | null = null;
   for (const s of tp.segments) {
@@ -67,6 +71,8 @@ export function buildJob(doc: Doc, profile: MachineProfile, opts: BuildOptions):
     if (!path || !last || last.li !== s.layer || last.x !== a.x || last.y !== a.y) {
       path = [a];
       layers[s.layer]!.paths.push(path);
+      if (blocks.at(-1)?.layer !== s.layer) blocks.push({ layer: s.layer, paths: [] });
+      blocks.at(-1)!.paths.push(path);
     }
     path.push(b);
     last = { li: s.layer, x: b.x, y: b.y };
@@ -81,12 +87,13 @@ export function buildJob(doc: Doc, profile: MachineProfile, opts: BuildOptions):
   const origin = designOrigin(doc, profile);
   if (opts.mode === "current") {
     if (!origin) throw new Error(t("Show at least one layer with drawable paths to set the relative origin"));
-    for (const l of layers) l.paths = l.paths.map((p) => p.map((v) => ({ x: v.x - origin.x, y: v.y - origin.y })));
+    // In place: the blocks share these paths (every point is its own object).
+    for (const l of layers) for (const p of l.paths) for (const v of p) [v.x, v.y] = [v.x - origin.x, v.y - origin.y];
     if (layers.some((l) => l.paths.some((p) => p.some((v) => v.x < 0 || v.y < 0)))) {
       throw new Error(t("A hidden output layer lies beyond the relative origin. Show it or turn off its output before framing, starting, or saving."));
     }
   }
-  return { input: { mode: opts.mode, layers: layers.filter((l) => l.paths.length > 0) }, toolpath: tp, designOrigin: origin ?? { x: 0, y: 0 } };
+  return { input: { mode: opts.mode, layers, blocks }, toolpath: tp, designOrigin: origin ?? { x: 0, y: 0 } };
 }
 
 /** The .rd file bytes for the document. */

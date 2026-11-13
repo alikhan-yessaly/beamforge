@@ -1,5 +1,6 @@
 import { t, tp } from "../i18n";
 import { translate } from "../geom/geom";
+import { appMode } from "./mode";
 import { signal } from "@preact/signals";
 import type { SceneObject } from "../scene/model";
 import { importDxf } from "../scene/importDxf";
@@ -129,6 +130,11 @@ export function handleKey(e: KeyboardEvent): void {
   }
   if (isJogKey(e)) return; // keyboard jog (keyboardJog.ts)
   if (isTyping(e.target)) return;
+  // The Device view is read-only: only the shortcut sheet.
+  if (appMode.value === "device") {
+    if (e.key === "?") shortcutsOpen.value = true;
+    return;
+  }
   // Sketch mode owns the keyboard (its own undo/redo, tools, delete).
   if (sketchSession.value) {
     if (sketchKey(e)) e.preventDefault();

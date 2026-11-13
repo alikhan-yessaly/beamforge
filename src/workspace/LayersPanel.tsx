@@ -1,5 +1,6 @@
 import { msg, t, tp } from "../i18n";
 import { BookmarkPlus, Check, ChevronDown, ChevronUp, Download, Eye, EyeOff, Gauge, type LucideIcon, MoveVertical, Repeat, RotateCcw, RotateCw, Save, SwatchBook, Target, X, Zap, ZapOff } from "lucide-preact";
+import { appMode } from "./mode";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { IconButton, IconToggle } from "../ui/icons";
 import { buildRdFile } from "../job/build";
@@ -235,7 +236,7 @@ function LayerEditor(props: { layer: Layer; index: number }) {
 function saveRd(): void {
   const pr = prefs.value;
   try {
-    const bytes = buildRdFile(doc.value, profile.value, { mode: pr.startFrom, innerFirst: pr.innerFirst });
+    const bytes = buildRdFile(doc.value, profile.value, { mode: pr.startFrom, innerFirst: pr.innerFirst, order: pr.jobOrder });
     const hidden = activeLayers(doc.value).filter((l) => l.output && l.show === false);
     if (hidden.length && !window.confirm(tp(["This file includes {n} dotted output layer. Dotted layers are still cut. Save it anyway?", "This file includes {n} dotted output layers. Dotted layers are still cut. Save it anyway?"], hidden.length))) return;
     const name = (doc.value.objects[0]?.name ?? "job").replace(/\.dxf$/i, "");
@@ -310,7 +311,7 @@ export function PreviewBar() {
         onInput={(e) => (preview.value = { on: true, t: Number(e.currentTarget.value) })}
       />
       {formatDuration(at)} / {formatDuration(total)}
-      <IconButton icon={X} label={t("Close preview (P)")} onClick={togglePreview} />
+      {appMode.value === "prepare" && <IconButton icon={X} label={t("Close preview (P)")} onClick={togglePreview} />}
     </span>
   );
 }

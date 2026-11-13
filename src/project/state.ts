@@ -23,7 +23,7 @@ interface ProjectState {
   saved: Saved | null;
 }
 
-const jobNow = (): ProjectJob => ({ startFrom: prefs.value.startFrom, innerFirst: prefs.value.innerFirst });
+const jobNow = (): ProjectJob => ({ startFrom: prefs.value.startFrom, innerFirst: prefs.value.innerFirst, order: prefs.value.jobOrder });
 
 const stored = (() => {
   try {
@@ -60,7 +60,7 @@ export const dirty = computed(() => {
   const empty = doc.value.objects.length === 0;
   if (!s) return !empty;
   const j = jobNow();
-  return s.doc !== doc.value || s.job.startFrom !== j.startFrom || s.job.innerFirst !== j.innerFirst;
+  return s.doc !== doc.value || s.job.startFrom !== j.startFrom || s.job.innerFirst !== j.innerFirst || (s.job.order ?? "auto") !== j.order;
 });
 
 effect(() => {
@@ -88,7 +88,7 @@ export function newProject(): void {
 function load(f: OpenedFile): void {
   const p = parseProject(f.text);
   resetDoc(p.doc);
-  prefs.value = { ...prefs.value, startFrom: p.job.startFrom, innerFirst: p.job.innerFirst };
+  prefs.value = { ...prefs.value, startFrom: p.job.startFrom, innerFirst: p.job.innerFirst, jobOrder: p.job.order ?? "auto" };
   project.value = { name: projectName(f.name), handle: f.handle, saved: { doc: doc.value, job: jobNow() } };
   if (f.handle) void rememberRecent(f.name, f.handle).then((r) => (recentFiles.value = r));
   const notes: string[] = [];

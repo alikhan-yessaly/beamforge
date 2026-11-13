@@ -127,6 +127,7 @@ body > #workspace { height: 100%; border: 0; }
 .ws-body { gap: .5rem; padding: .5rem; }
 .ws-canvas-wrap { border: 1px solid #dce1e8; border-radius: 8px; background: #e7e9ec; }
 .ws-start-from { position: absolute; top: .6rem; right: .6rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.ws-job-summary .ws-start-from { position: static; box-shadow: none; }
 .ws-context-menu { position: fixed; z-index: 1100; min-width: 220px; padding: .3rem; background: #fff; border: 1px solid #d5dbe3; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
 .ws .ws-context-menu button { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; width: 100%; gap: .6rem; text-align: left; border: 0; }
 .ws-context-menu small { color: #64748b; white-space: nowrap; }
@@ -360,3 +361,31 @@ body > #workspace { height: 100%; border: 0; }
 .ws-scale .ws-num input { width: 4.2rem; }
 .ws-sketch-scaled { font-size: .75rem; padding: .1rem .45rem; border-radius: 999px; background: #fef3c7; color: #92400e; white-space: nowrap; }
 .ws-lang { font-size: .75rem; padding: .15rem .25rem; border-radius: 4px; margin-right: .35rem; align-self: center; }
+
+/* Prepare / Device modes */
+.ws-appmode { display: inline-flex; flex: none; border: 1px solid var(--ui-border); border-radius: 7px; overflow: hidden; }
+.ws-appmode button { display: inline-flex; align-items: center; gap: .3rem; border: 0; border-radius: 0; padding: .3rem .7rem; background: #fff; font-weight: 500; white-space: nowrap; }
+.ws-appmode button + button { border-left: 1px solid var(--ui-border); }
+.ws-appmode button.active { background: #2563eb; color: #fff; }
+.ws-device-title { flex: 1; color: var(--ws-text); font-size: .85rem; }
+.ws-prepare { display: inline-flex; align-items: center; gap: .35rem; margin-left: auto; padding: .35rem .9rem; font-weight: 600; background: #2563eb; color: #fff; border: 1px solid #2563eb; border-radius: 6px; }
+.ws-prepare:disabled { background: #93a4c8; border-color: #93a4c8; }
+.ws-job-name { font-weight: 600; margin: 0 0 .4rem; overflow-wrap: anywhere; }
+.ws-job-facts { display: grid; grid-template-columns: auto 1fr; gap: .15rem .8rem; margin: 0 0 .5rem; font-size: .85rem; }
+.ws-job-facts dt { color: var(--ws-text); }
+.ws-job-facts dd { margin: 0; }
+.ws-job-summary .ws-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; font-size: .85rem; }
+.ws-job-layers { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.ws-job-layers td { padding: .2rem .25rem; border-bottom: 1px solid var(--ui-border); white-space: nowrap; }
+.ws-job-layers td:nth-last-child(2) { text-align: right; color: var(--ws-text); }
+.ws-job-layers td.ws-job-move { padding: 0; text-align: right; }
+.ws-job-move button { padding: .1rem; }
+.ws-job-summary select { min-width: 0; max-width: 60%; }
+.ws-save-machine .ws-col { display: flex; flex-direction: column; gap: .2rem; font-size: .85rem; margin: .4rem 0; }
+.ws-save-machine input { font-family: ui-monospace, monospace; text-transform: uppercase; }
+.ws-save-machine .ws-row { display: flex; align-items: center; gap: .5rem; }
+.ws-save-machine button { display: inline-flex; align-items: center; gap: .3rem; }
+.ws-machine-files { margin-top: .6rem; font-size: .85rem; }
+.ws-machine-files .ws-row { justify-content: space-between; }
+.ws-machine-files ol { margin: .2rem 0; padding-left: 1.6rem; font-family: ui-monospace, monospace; }
+.ws-machine-files li.ws-taken { color: var(--ws-out); font-weight: 600; }

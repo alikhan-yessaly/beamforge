@@ -28,6 +28,7 @@ const SUB: Record<string, string> = {
   "c6 31": "Part Power Min 1", "c6 32": "Part Power Max 1", "c6 41": "Part Power Min 2", "c6 42": "Part Power Max 2",
   "c6 35": "Part Power Min 3", "c6 36": "Part Power Max 3", "c6 37": "Part Power Min 4", "c6 38": "Part Power Max 4",
   "c9 02": "Velocity", "c9 04": "Part Velocity",
+  "e8 01": "Stored File Name", "e8 02": "Store Next Job", "e7 01": "Set File Name",
   "ca 01": "Layer/Mode flag", "ca 02": "Layer Number", "ca 05": "Layer Color", "ca 06": "Part Layer Color",
   "ca 22": "Part Max Layer", "ca 41": "Part Work Mode",
   "d8 00": "Start Process", "d8 01": "Stop Process", "d8 02": "Pause Process", "d8 03": "Restore Process",

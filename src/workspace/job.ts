@@ -20,7 +20,7 @@ export const homePoint = (p: MachineProfile) => ({ x: p.origin.endsWith("right")
 
 export const toolpath = computed<Toolpath>(() => {
   const p = profile.value;
-  const tp = planToolpath(settledDoc.value, { start: homePoint(p), innerFirst: prefs.value.innerFirst });
+  const tp = planToolpath(settledDoc.value, { start: homePoint(p), innerFirst: prefs.value.innerFirst, order: prefs.value.jobOrder });
   return prefs.value.startFrom === "current" ? relativeToolpath(tp, settledDoc.value, p) : tp;
 });
 export const jobEstimate = computed<Estimate>(() => estimate(toolpath.value, profile.value));

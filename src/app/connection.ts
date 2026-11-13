@@ -20,7 +20,8 @@ export const usb = new WebSerialTransport({ baudRate: 115200 });
 export const bridge = new WebSocketTransport();
 const savedKind = (() => {
   try {
-    return localStorage.getItem(CONN_KEY) as ConnKind | null;
+    const k = localStorage.getItem(CONN_KEY);
+    return k === "usb" || k === "sim" || k === "bridge" ? k : null; // ignore anything else stored
   } catch {
     return null;
   }

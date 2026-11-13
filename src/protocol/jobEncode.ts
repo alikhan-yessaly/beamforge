@@ -31,6 +31,11 @@ export interface RdJobInput {
   /** absolute: coordinates are machine positions. current: relative to where the head is when the job starts. */
   mode: "absolute" | "current";
   layers: RdLayer[];
+  /**
+   * Cut order as runs of paths per layer (index into `layers`), when it isn't simply each layer's paths in turn:
+   * a layer can come back later (object-by-object jobs). Its settings are sent again each time it starts.
+   */
+  blocks?: { layer: number; paths: PointUm[][] }[];
 }
 
 const Z5 = [0, 0, 0, 0, 0];
@@ -72,9 +77,14 @@ function bounds(paths: PointUm[][]): Bounds | null {
 
 /** Encode a job as unswizzled commands, ending with the checksum and `D7`. */
 export function encodeJobCommands(input: RdJobInput): Uint8Array[] {
-  const layers = input.layers
-    .map((l) => ({ ...l, paths: l.paths.map((p) => p.map((v) => ({ x: Math.round(v.x), y: Math.round(v.y) }))).filter((p) => p.length > 0) }))
-    .filter((l) => l.paths.length > 0);
+  const round = (paths: PointUm[][]) => paths.map((p) => p.map((v) => ({ x: Math.round(v.x), y: Math.round(v.y) }))).filter((p) => p.length > 0);
+  const kept = input.layers.map((l, i) => ({ ...l, i, paths: round(l.paths) })).filter((l) => l.paths.length > 0);
+  const layers = kept.map(({ i: _, ...l }) => l);
+  // Runs to cut, as indices into `layers` (empty layers dropped).
+  const index = new Map(kept.map((l, n) => [l.i, n]));
+  const runs = (input.blocks ?? input.layers.map((l, layer) => ({ layer, paths: l.paths })))
+    .map((b) => ({ n: index.get(b.layer), paths: round(b.paths) }))
+    .filter((b): b is { n: number; paths: PointUm[][] } => b.n !== undefined && b.paths.length > 0);
   if (layers.length === 0) throw new Error("Nothing to cut: no layer has paths");
   if (layers.length > 128) throw new Error("Too many layers (max 128)");
   const doc = bounds(layers.flatMap((l) => l.paths))!;
@@ -144,7 +154,8 @@ export function encodeJobCommands(input: RdJobInput): Uint8Array[] {
   // Cutting.
   let pos: PointUm | null = null;
   let length = 0; // µm of cuts and travels after the first move, for DA 01 06 20
-  layers.forEach((l, n) => {
+  for (const { n, paths } of runs) {
+    const l = layers[n]!;
     const lo = encodeInt14(powerValue(l.minPower));
     const hi = encodeInt14(powerValue(Math.max(l.minPower, l.maxPower)));
     push(0xca, 0x01, 0x00);
@@ -162,7 +173,7 @@ export function encodeJobCommands(input: RdJobInput): Uint8Array[] {
     push(0xc6, 0x21, ...lo);
     push(0xc6, 0x22, ...hi);
     push(0xca, 0x03, 0x01);
-    for (const path of l.paths) {
+    for (const path of paths) {
       const first = path[0]!;
       if (!pos || pos.x !== first.x || pos.y !== first.y) {
         if (pos) length += Math.hypot(first.x - pos.x, first.y - pos.y);
@@ -180,7 +191,7 @@ export function encodeJobCommands(input: RdJobInput): Uint8Array[] {
         pos = p;
       }
     }
-  });
+  }
 
   // Trailer.
   push(0xeb);

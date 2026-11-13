@@ -1,10 +1,16 @@
 // Toolpath planning: turn the document into an ordered list of cut and travel segments in bed millimetres.
 //
-// Per layer (in layer order, output on): collect that colour's paths, order them, and cut each shape with all of the
-// layer's passes before moving on (passes are repeated geometry, see PROTOCOL.md); join everything with travel.
-// Open paths that meet end to end are joined first. Ordering is greedy nearest-neighbour from the head, then 2-opt;
-// a closed path may start at any vertex, an open path from either end. With `innerFirst`, a closed path is only
-// eligible once every closed path inside it is done (so a part is never cut free before its holes).
+// Work comes in units: a fill sweep (one area, or near areas swept together) or one cut path. Each unit gets all of
+// its layer's passes before the next (passes are repeated geometry, see PROTOCOL.md). Fills always come before the
+// cuts around them, so a part is engraved while it's still held by the sheet. Two orders:
+//  - layer by layer: every fill (layers in order), then every cut (layers in order);
+//  - object by object: a part (the outermost closed cut path and everything inside it, on any layer) gets its fills
+//    and then its cuts before the head moves to the next part, nearest first.
+// "auto" plans both and keeps the one with less travel (object by object also when layer by layer would cut a shape
+// before the shapes inside it on a later layer). Within a group of cuts: open paths that meet end to end are joined,
+// then greedy nearest-neighbour from the head and 2-opt; a closed path may start at any vertex, an open path from
+// either end. With `innerFirst`, a closed path is only eligible once every closed path inside it is done (so a part
+// is never cut free before its holes).
 import { t } from "../i18n";
 import { type Box, type Vec, apply, pathsBox, pointInPolygon } from "../geom/geom";
 import type { Doc, Layer } from "../scene/model";
@@ -23,12 +29,17 @@ export interface Segment {
   layer: number;
 }
 
+/** How the work is ordered: "auto" picks whichever of the two has less travel. */
+export type JobOrder = "auto" | "layer" | "object";
+
 export interface Toolpath {
-  /** Layers that are cut, in order (output on and with paths). */
+  /** Layers that are cut (output on and with paths), in layer order. */
   layers: Layer[];
   segments: Segment[];
   /** Where the head starts and returns to (internal bed mm). */
   start: Vec;
+  /** The order used (what "auto" chose). */
+  order: Exclude<JobOrder, "auto">;
   /** Problems that make the job unusable (e.g. a fill too dense); a job is not built while any remain. */
   errors: string[];
   /** Things worth knowing that don't block the job (e.g. open paths in a fill layer are not filled). */
@@ -38,6 +49,8 @@ export interface Toolpath {
 export interface PlanOptions {
   start: Vec;
   innerFirst: boolean;
+  /** Default "auto". */
+  order?: JobOrder;
 }
 
 interface Item {
@@ -48,15 +61,30 @@ interface Item {
   inner: number[];
 }
 
-/** Above this many closed paths in a layer, skip the O(n²) containment test. */
+/** One piece of work before ordering: a fill sweep or a cut path, on layer `li` (index into Toolpath.layers). */
+interface Work {
+  li: number;
+  fill?: Vec[][];
+  item?: Item;
+  box: Box;
+  /** A point inside the work, for containment. */
+  at: Vec;
+}
+
+/** A unit in cut order: its paths get all of the layer's passes. */
+interface Unit {
+  li: number;
+  paths: Vec[][];
+}
+
+/** Above this many closed paths, skip the O(n²) containment tests (no inner-first, no parts). */
 const INNER_FIRST_LIMIT = 3000;
 
 export function planToolpath(doc: Doc, opts: PlanOptions): Toolpath {
-  const layers = activeLayers(doc).filter((l) => l.output);
-  const out: Toolpath = { layers: [], segments: [], start: opts.start, errors: [], warnings: [] };
-  let pos = opts.start;
+  const out: Toolpath = { layers: [], segments: [], start: opts.start, order: "layer", errors: [], warnings: [] };
+  const work: Work[] = [];
 
-  for (const layer of layers) {
+  for (const layer of activeLayers(doc).filter((l) => l.output)) {
     let items: Item[] = [];
     // Fill regions for this colour: the layer's own closed shapes (one even-odd group, as before) and every
     // region tagged with it by the Fill tool (its outline minus the closed paths directly inside it).
@@ -74,76 +102,191 @@ export function planToolpath(doc: Doc, opts: PlanOptions): Toolpath {
     if (items.length === 0 && regions.length === 0) continue;
     const mode = layer.mode ?? "cut";
     const name = t("Layer {color}", { color: layer.color });
-    // Units are done one after another, each with all of the layer's passes before the next.
-    const units: Vec[][][] = [];
-    let at = pos;
+    const li = out.layers.length;
+    const mine: Work[] = [];
     if (mode === "cut" && regions.length) out.warnings.push(t("{layer} is a cut layer: its filled regions are skipped. Set the layer to Fill.", { layer: name }));
     if (mode !== "cut") {
       const groups = mode === "fill" || mode === "fillCut" ? [legacy, ...regions] : regions;
-      const f = fillUnits(groups, { ...DEFAULT_FILL, ...layer.fill }, at);
+      const f = fillCandidates(groups, { ...DEFAULT_FILL, ...layer.fill });
       if (f.error) out.errors.push(`${name}: ${f.error}`);
       if (mode === "fill" && items.some((i) => !i.closed)) out.warnings.push(t("{layer}: open paths can't be filled and are skipped.", { layer: name }));
-      units.push(...f.units);
-      if (units.length) at = units.at(-1)!.at(-1)!.at(-1)!;
+      for (const fill of f.cands) {
+        const first = fill[0]!;
+        mine.push({ li, fill, box: pathsBox(fill.map((points) => ({ points, closed: false }))), at: mid(first[0]!, first[1] ?? first[0]!) });
+      }
     }
     if (mode !== "fill") {
       items = joinOpenPaths(items);
-      if (opts.innerFirst) markInner(items);
-      for (const pts of orderItems(items, at)) units.push([pts]);
+      for (const item of items) mine.push({ li, item, box: item.box, at: item.closed ? item.pts[0]! : mid(item.pts[0]!, item.pts[1]!) });
     }
-    if (units.length === 0) continue;
-
-    const li = out.layers.length;
+    if (mine.length === 0) continue;
     out.layers.push(layer);
-    for (const unit of units) {
-      for (let pass = 0; pass < layer.passes; pass++) {
-        for (const path of unit) {
-          // A lone open path is cut back and forth on alternate passes instead of travelling back to its start.
-          const pts = unit.length === 1 && pass % 2 === 1 && !samePoint(path[0]!, path.at(-1)!) ? [...path].reverse() : path;
-          travel(out.segments, pos, pts[0]!);
-          for (let k = 1; k < pts.length; k++) {
-            const a = pts[k - 1]!;
-            const b = pts[k]!;
-            out.segments.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y, cut: true, layer: li });
-          }
-          pos = pts.at(-1)!;
-        }
-      }
-    }
+    work.push(...mine);
   }
-  if (out.segments.length > 0) travel(out.segments, pos, opts.start);
+
+  const rel = relations(work, opts.innerFirst);
+  const want = opts.order ?? "auto";
+  let units: Unit[];
+  if (want === "layer" || (want === "auto" && !rel)) {
+    units = byLayer(work, out.layers.length, opts);
+    out.order = "layer";
+    if (want === "layer" && rel?.crossLayer) out.warnings.push(t("Layer by layer cuts some shapes before the shapes inside them on a later layer. Move that layer up, or order object by object."));
+  } else if (want === "object") {
+    units = byObject(work, rel!, out.layers.length, opts);
+    out.order = "object";
+  } else {
+    const object = byObject(work, rel!, out.layers.length, opts);
+    const layer = rel!.crossLayer ? null : byLayer(work, out.layers.length, opts);
+    const travel = (u: Unit[]) => emit({ ...out, segments: [] }, u, opts.start).reduce((n, s) => (s.cut ? n : n + Math.hypot(s.x1 - s.x0, s.y1 - s.y0)), 0);
+    if (layer && travel(layer) <= travel(object)) [units, out.order] = [layer, "layer"];
+    else [units, out.order] = [object, "object"];
+  }
+  out.segments = emit(out, units, opts.start);
   return out;
 }
 
+const mid = (a: Vec, b: Vec): Vec => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+const boxIn = (b: Box, B: Box, eps = 1e-6) => b.minX >= B.minX - eps && b.minY >= B.minY - eps && b.maxX <= B.maxX + eps && b.maxY <= B.maxY + eps;
+const sameBox = (b: Box, B: Box) => b.minX === B.minX && b.minY === B.minY && b.maxX === B.maxX && b.maxY === B.maxY;
+
 /**
- * Fill units: the filled areas ("islands") grouped into clusters swept together when that's quicker, each cluster
- * hatched separately (all passes before the next), nearest first, entered from its nearer end. Offset contours go
- * island by island.
+ * Parts and cross-layer containment. A part is an outermost closed cut path and every piece of work inside it;
+ * work outside every closed cut path is a part of its own. Null when there are too many closed paths to compare.
+ */
+function relations(work: Work[], innerFirst: boolean): { part: number[]; crossLayer: boolean } | null {
+  const closed = work.map((_, i) => i).filter((i) => work[i]!.item?.closed && work[i]!.item!.pts.length >= 3);
+  if (closed.length > INNER_FIRST_LIMIT) return null;
+  // w lies inside closed cut c.
+  const inside = (w: number, c: number) => {
+    if (w === c) return false;
+    const [W, C] = [work[w]!, work[c]!];
+    if (!boxIn(W.box, C.box)) return false;
+    // Duplicate outlines: the lower index counts as the outer one.
+    if (W.item?.closed && sameBox(W.box, C.box)) return w > c;
+    return pointInPolygon(W.at, C.item!.pts);
+  };
+  const roots = closed.filter((c) => !closed.some((o) => inside(c, o)));
+  let crossLayer = false;
+  if (innerFirst) {
+    // A closed cut on an earlier layer around a closed cut on a later one: layer by layer would cut it first.
+    for (const a of closed) for (const b of closed) if (work[b]!.li > work[a]!.li && inside(b, a)) crossLayer = true;
+  }
+  const part = work.map((_, w) => {
+    if (roots.includes(w)) return w;
+    const r = roots.find((c) => inside(w, c));
+    return r ?? w;
+  });
+  return { part, crossLayer };
+}
+
+/** Every fill, layers in order, then every cut, layers in order. */
+function byLayer(work: Work[], nLayers: number, opts: PlanOptions): Unit[] {
+  const units: Unit[] = [];
+  let pos = opts.start;
+  for (let li = 0; li < nLayers; li++) pos = pushFills(units, work.filter((w) => w.li === li && w.fill), pos);
+  for (let li = 0; li < nLayers; li++) pos = pushCuts(units, work.filter((w) => w.li === li && w.item), pos, opts.innerFirst);
+  return units;
+}
+
+/** Part by part, nearest first: its fills (layers in order), then its cuts (layers in order, outlines around later layers last). */
+function byObject(work: Work[], rel: { part: number[] }, nLayers: number, opts: PlanOptions): Unit[] {
+  const parts = new Map<number, Work[]>();
+  work.forEach((w, i) => parts.set(rel.part[i]!, [...(parts.get(rel.part[i]!) ?? []), w]));
+  const list = [...parts.values()].map((ws) => ({ ws, box: unionBox(ws.map((w) => w.box)) }));
+  const units: Unit[] = [];
+  const used = new Uint8Array(list.length);
+  let pos = opts.start;
+  for (let n = 0; n < list.length; n++) {
+    let [best, bestD] = [-1, Infinity];
+    list.forEach((p, i) => {
+      if (used[i]) return;
+      const d = boxDist(p.box, pos);
+      if (d < bestD) [best, bestD] = [i, d];
+    });
+    used[best] = 1;
+    const ws = list[best]!.ws;
+    for (let li = 0; li < nLayers; li++) pos = pushFills(units, ws.filter((w) => w.li === li && w.fill), pos);
+    const cuts = ws.filter((w) => w.item);
+    // A closed cut with a closed cut of a later layer inside it waits until the end of the part.
+    const later = (w: Work) => w.item!.closed && opts.innerFirst && cuts.some((o) => o.li > w.li && o.item!.closed && boxIn(o.box, w.box) && !sameBox(o.box, w.box) && pointInPolygon(o.at, w.item!.pts));
+    const deferred = cuts.filter(later);
+    for (let li = 0; li < nLayers; li++) pos = pushCuts(units, cuts.filter((w) => w.li === li && !deferred.includes(w)), pos, opts.innerFirst);
+    pos = pushCuts(units, deferred, pos, opts.innerFirst);
+  }
+  return units;
+}
+
+function unionBox(boxes: Box[]): Box {
+  return boxes.reduce((a, b) => ({ minX: Math.min(a.minX, b.minX), minY: Math.min(a.minY, b.minY), maxX: Math.max(a.maxX, b.maxX), maxY: Math.max(a.maxY, b.maxY) }));
+}
+
+/** Fill sweeps nearest first; each may run as generated or fully reversed, whichever starts nearer. */
+function pushFills(units: Unit[], ws: Work[], from: Vec): Vec {
+  if (!ws.length) return from;
+  const ordered = orderFills(ws.map((w) => w.fill!), from);
+  for (const paths of ordered) units.push({ li: ws[0]!.li, paths });
+  return ordered.at(-1)!.at(-1)!.at(-1)!;
+}
+
+function pushCuts(units: Unit[], ws: Work[], from: Vec, innerFirst: boolean): Vec {
+  if (!ws.length) return from;
+  const items = ws.map((w) => ({ ...w.item!, inner: [] }));
+  if (innerFirst) markInner(items);
+  const order = orderItems(items, from);
+  for (const o of order) units.push({ li: ws[o.i]!.li, paths: [o.pts] });
+  return order.at(-1)!.pts.at(-1)!;
+}
+
+/** Turn units into segments, each unit with all of its layer's passes, joined by travel; back to `start` at the end. */
+function emit(out: Toolpath, units: Unit[], start: Vec): Segment[] {
+  const segs: Segment[] = [];
+  let pos = start;
+  for (const unit of units) {
+    const passes = out.layers[unit.li]!.passes;
+    for (let pass = 0; pass < passes; pass++) {
+      for (const path of unit.paths) {
+        // A lone open path is cut back and forth on alternate passes instead of travelling back to its start.
+        const pts = unit.paths.length === 1 && pass % 2 === 1 && !samePoint(path[0]!, path.at(-1)!) ? [...path].reverse() : path;
+        travel(segs, pos, pts[0]!);
+        for (let k = 1; k < pts.length; k++) {
+          const a = pts[k - 1]!;
+          const b = pts[k]!;
+          segs.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y, cut: true, layer: unit.li });
+        }
+        pos = pts.at(-1)!;
+      }
+    }
+  }
+  if (segs.length > 0) travel(segs, pos, start);
+  return segs;
+}
+
+/**
+ * Fill sweeps for a layer: the filled areas ("islands") grouped into clusters swept together when that's quicker,
+ * each cluster hatched separately. Offset contours go island by island.
  *
  * When to sweep two islands as one: they share rows across the scan direction. Together, every shared row jumps the
  * gap between them; apart, the head jumps between them once. So: together when shared rows × gap < that one jump.
+ * (Inside a sweep, the hatch applies the same rule to the parts of an area, see `fill.ts`.)
  */
-export function fillUnits(groups: Vec[][][], s: FillSettings, from: Vec): { units: Vec[][][]; error?: string } {
+export function fillCandidates(groups: Vec[][][], s: FillSettings): { cands: Vec[][][]; error?: string } {
   const islands = fillIslands(groups);
-  if (!islands.length) return { units: [] };
+  if (!islands.length) return { cands: [] };
   const clusters = s.pattern === "offset" ? islands.map((i) => [i]) : clusterIslands(islands, s);
-  const cand: Vec[][][] = [];
+  const cands: Vec[][][] = [];
   let total = 0;
   for (const cl of clusters) {
     const f = fillPaths(cl.flat(), s);
-    if (f.error) return { units: [], error: f.error };
+    if (f.error) return { cands: [], error: f.error };
     total += f.paths.length;
-    if (total > MAX_FILL_PATHS) return { units: [], error: tooDenseMessage() };
-    if (!f.paths.length) continue;
-    if (s.pattern === "offset") {
-      const rings: Item[] = f.paths.map((p) => {
-        const pts = p.slice(0, -1);
-        return { pts, closed: true, box: pathsBox([{ points: pts, closed: true }]), inner: [] };
-      });
-      cand.push(orderItems(rings, rings[0]!.pts[0]!));
-    } else cand.push(f.paths);
+    if (total > MAX_FILL_PATHS) return { cands: [], error: tooDenseMessage() };
+    if (f.paths.length) cands.push(f.paths);
   }
-  // Nearest cluster next; each may run as hatched or fully reversed, whichever starts nearer.
+  return { cands };
+}
+
+/** Nearest sweep next; each may run as generated or fully reversed, whichever starts nearer. */
+function orderFills(cand: Vec[][][], from: Vec): Vec[][][] {
   const units: Vec[][][] = [];
   const used = new Uint8Array(cand.length);
   let pos = from;
@@ -165,7 +308,14 @@ export function fillUnits(groups: Vec[][][], s: FillSettings, from: Vec): { unit
     units.push(unit);
     pos = unit.at(-1)!.at(-1)!;
   }
-  return { units };
+  return units;
+}
+
+/** Fill units for one layer's areas, nearest first from `from` (each with all passes before the next). */
+export function fillUnits(groups: Vec[][][], s: FillSettings, from: Vec): { units: Vec[][][]; error?: string } {
+  const c = fillCandidates(groups, s);
+  if (c.error) return { units: [], error: c.error };
+  return { units: c.cands.length ? orderFills(c.cands, from) : [] };
 }
 
 /** Above this many islands, sweep them all as one (the pairwise test is O(n²)). */
@@ -269,7 +419,7 @@ function markInner(items: Item[]): void {
 const boxDist = (b: Box, p: Vec) => Math.hypot(Math.max(b.minX - p.x, 0, p.x - b.maxX), Math.max(b.minY - p.y, 0, p.y - b.maxY));
 
 /** Order items: greedy nearest neighbour, improved by 2-opt; each item's points in cut order (closed paths end where they began). */
-function orderItems(items: Item[], from: Vec): Vec[][] {
+function orderItems(items: Item[], from: Vec): { i: number; pts: Vec[] }[] {
   return improve(items, nearestOrder(items, from), from);
 }
 
@@ -309,7 +459,7 @@ const TWO_OPT_LIMIT = 1500;
  * 2-opt on the travel between items: reverse a run of the order when that shortens the moves into and out of it,
  * as long as every shape still comes after the shapes inside it. Then pick each start point for the final order.
  */
-function improve(items: Item[], order: number[], from: Vec): Vec[][] {
+function improve(items: Item[], order: number[], from: Vec): { i: number; pts: Vec[] }[] {
   const n = order.length;
   if (n >= 4 && n <= TWO_OPT_LIMIT) {
     // Entry/exit points: closed paths at their nearest-start vertex (fixed for this pass), open ones at either end.
@@ -348,21 +498,21 @@ function improve(items: Item[], order: number[], from: Vec): Vec[][] {
       }
     }
     // Final points: open paths in the chosen direction, closed ones from the vertex nearest where the head is.
-    const out: Vec[][] = [];
+    const out: { i: number; pts: Vec[] }[] = [];
     let at = from;
     for (const i of order) {
       const it = items[i]!;
       const pts = it.closed ? startAt(it, nearestStart(it, at).k) : rev[i] ? [...it.pts].reverse() : it.pts;
-      out.push(pts);
+      out.push({ i, pts });
       at = pts.at(-1)!;
     }
     return out;
   }
-  const out: Vec[][] = [];
+  const out: { i: number; pts: Vec[] }[] = [];
   let at = from;
   for (const i of order) {
     const pts = startAt(items[i]!, nearestStart(items[i]!, at).k);
-    out.push(pts);
+    out.push({ i, pts });
     at = pts.at(-1)!;
   }
   return out;

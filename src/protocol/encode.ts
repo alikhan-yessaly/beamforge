@@ -31,6 +31,36 @@ export const queryStatus = () => readMemory(ADDR_MACHINE_STATUS);
 
 export const startJob = () => Uint8Array.of(0xd8, 0x00);
 export const stopJob = () => Uint8Array.of(0xd8, 0x01);
+
+// ---------- Stored files (LightBurn "Send", traced 2026-11-12; docs/PROTOCOL.md "Saving a job on the controller") ----------
+
+/** Number of jobs stored in the controller's memory (04 05). */
+export const ADDR_FILE_COUNT = 0x205;
+/** File names: printable ASCII, as LightBurn offers them (upper case). The controller's own limits are unknown. */
+export const FILE_NAME_MAX = 16;
+const FILE_NAME_RE = /^[A-Z0-9 _.-]+$/;
+
+/** Normalise a name the way LightBurn does (upper case, trimmed); null if it can't be stored. */
+export function normalizeFileName(name: string): string | null {
+  const n = name.trim().toUpperCase();
+  return n.length > 0 && n.length <= FILE_NAME_MAX && FILE_NAME_RE.test(n) ? n : null;
+}
+
+/** E8 01 <index>: ask for the name of stored file `index` (1-based, 14-bit). */
+export const readFileName = (index: number) => Uint8Array.of(0xe8, 0x01, (index >> 7) & 0x7f, index & 0x7f);
+
+/** Parse an E8 01 <index> <name> 00 reply. */
+export function parseFileNameReply(c: Uint8Array): { index: number; name: string } | null {
+  if (c[0] !== 0xe8 || c[1] !== 0x01 || c.length < 5 || c.at(-1) !== 0x00) return null;
+  return { index: (c[2]! << 7) | c[3]!, name: String.fromCharCode(...c.subarray(4, c.length - 1)) };
+}
+
+/** E8 02, then E7 01 <name> 00: the job that follows is stored under `name` instead of run. One write, as LightBurn. */
+export function storeJobHeader(name: string): Uint8Array {
+  const n = normalizeFileName(name);
+  if (n === null || n !== name) throw new Error(`Invalid file name: ${JSON.stringify(name)}`);
+  return Uint8Array.of(0xe8, 0x02, 0xe7, 0x01, ...Array.from(n, (ch) => ch.charCodeAt(0)), 0x00);
+}
 export const pauseJob = () => Uint8Array.of(0xd8, 0x02);
 export const resumeJob = () => Uint8Array.of(0xd8, 0x03);
 

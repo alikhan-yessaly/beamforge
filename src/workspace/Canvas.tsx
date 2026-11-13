@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { type Box, type Vec, apply, distToSegment, translate } from "../geom/geom";
+import { appMode } from "./mode";
 import type { Doc } from "../scene/model";
 import { boxCenter, objectBox, rotateAbout, scaleAbout, transformSelected } from "../scene/ops";
 import { commit, cursor, doc, prefs, profile, selBox, selection } from "../scene/store";
@@ -73,7 +74,8 @@ export function Canvas() {
   const sb = selBox.value;
   const size = canvasSize.value;
   const pv = preview.value;
-  const pvData = pv.on ? { tp: toolpath.value, est: jobEstimate.value, t: pv.t } : null;
+  const device = appMode.value === "device";
+  const pvData = pv.on || device ? { tp: toolpath.value, est: jobEstimate.value, t: pv.t } : null;
   const hu = headUm.value;
   const placement = relativePlacement.value;
   const mappedHead = hu && placement ? relativeHeadOnDrawing(hu, placement.start, placement.designOrigin) : null;
@@ -108,7 +110,7 @@ export function Canvas() {
       const others = { ...d, objects: d.objects.filter((o) => o.id !== ses.objectId) };
       draw(ctx, size.w, size.h, dpr, v, others, p, { selection: new Set(), selBox: null, hover: null, marquee: null, dimObjects: true });
       drawSketch(ctx, v, ses, skPreview, skSuggestions);
-    } else draw(ctx, size.w, size.h, dpr, v, d, p, { selection: sel, selBox: sb, hover, marquee, preview: pvData, head, projectedHead, jobOrigin, fillHover: ft && fillPreview ? { rings: fillPreview, color: ft.color } : null });
+    } else draw(ctx, size.w, size.h, dpr, v, d, p, { selection: device ? new Set() : sel, selBox: device ? null : sb, hover: device ? null : hover, marquee, preview: pvData, head, projectedHead, jobOrigin, fillHover: ft && fillPreview ? { rings: fillPreview, color: ft.color } : null });
   });
 
   useEffect(() => {
@@ -194,7 +196,7 @@ export function Canvas() {
     c.focus();
     const s = local(e);
     const bed = toBed(view.value, s);
-    if (e.button === 1 || e.button === 2 || spaceDown.current) {
+    if (e.button === 1 || e.button === 2 || spaceDown.current || appMode.value === "device") {
       drag.current = { kind: "pan", start: s, view: view.value };
       viewTouched.value = true;
       return;
@@ -387,7 +389,7 @@ export function Canvas() {
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        if (e.dataTransfer?.files.length) void importFiles(e.dataTransfer.files);
+        if (e.dataTransfer?.files.length && appMode.value === "prepare") void importFiles(e.dataTransfer.files);
       }}
     >
       <canvas
@@ -404,7 +406,7 @@ export function Canvas() {
         }}
         onContextMenu={(e) => {
           e.preventDefault();
-          if (sketchSession.value) return;
+          if (sketchSession.value || appMode.value === "device") return;
           const point = { x: e.clientX, y: e.clientY };
           const right = rightDrag.current;
           if (right && !right.released) right.menu = point;
@@ -416,6 +418,7 @@ export function Canvas() {
         onDblClick={(e) => {
           const s = local(e as unknown as PointerEvent);
           if (sketchSession.value) return sketchDoubleClick(s, toBed(view.value, s));
+          if (appMode.value === "device") return fitBed(profile.value);
           const hit = hitObject(doc.value, view.value, toBed(view.value, s));
           const o = hit ? doc.value.objects.find((x) => x.id === hit) : null;
           if (o && (o.sketch || o.paths.length)) void editSketch(o);
@@ -428,7 +431,7 @@ export function Canvas() {
           <TextEditor />
         </>
       ) : (
-        <StartFromControl />
+        !device && <StartFromControl />
       )}
     </div>
   );

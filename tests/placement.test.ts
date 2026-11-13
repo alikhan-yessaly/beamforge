@@ -23,7 +23,7 @@ describe("relative workplane head", () => {
 
   it("rebases preview travel onto the job origin without changing cut order", () => {
     const p: MachineProfile = { name: "test", bedW: 1300, bedH: 900, origin: "top-right", travelSpeed: 100, accel: 2000 };
-    const tp: Toolpath = { start: { x: 1300, y: 0 }, layers: [], errors: [], warnings: [], segments: [
+    const tp: Toolpath = { order: "layer", start: { x: 1300, y: 0 }, layers: [], errors: [], warnings: [], segments: [
       { x0: 1300, y0: 0, x1: 800, y1: 360, cut: false, layer: -1 },
       { x0: 800, y0: 360, x1: 840, y1: 350, cut: true, layer: 0 },
       { x0: 840, y0: 350, x1: 800, y1: 360, cut: false, layer: -1 },

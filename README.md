@@ -13,8 +13,12 @@
   imported DXF files as sketches.
 - Arrange shapes on a machine bed, configure layers, and preview jobs. Cut outlines and engrave areas with
   separate speed and power: the Fill tool fills any closed area in a colour of its own.
+- Prepare a job, then switch to Device mode to review it: a read-only toolpath preview, time and size, the cut
+  order (object by object, layer by layer, or whichever is faster; fills always run before the cuts around them)
+  and the layer order.
 - Use the interface in English, Kazakh or Russian.
-- Frame and run jobs over USB with supported desktop browsers.
+- Frame and run jobs over USB with supported desktop browsers, or save a job in the controller's memory under a
+  name to start later from the machine's panel (not yet verified on hardware).
 - Save projects locally and try the workspace with a simulator.
 
 ## Safety and limitations

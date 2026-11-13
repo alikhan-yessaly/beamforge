@@ -29,6 +29,9 @@ export class RuidaLink {
 
   private rx: number[] = [];
   private pending: ((r: MemoryReply[]) => void) | null = null;
+  /** For exchange(): receives every complete command the controller sends. */
+  private rawWaiter: ((cmd: Uint8Array) => void) | null = null;
+  private rawRx: number[] = [];
   /** Serialises query() calls so concurrent callers (poller, buttons) don't steal each other's replies. */
   private queryChain: Promise<unknown> = Promise.resolve();
   private offData: (() => void) | null = null;
@@ -140,6 +143,35 @@ export class RuidaLink {
     return result;
   }
 
+  /**
+   * Send a command and wait for a reply that is not a memory read (for example E8 01, a stored file's name).
+   * Resolves with the first complete reply command `accept` takes, or null after `timeoutMs`. Serialised with query().
+   */
+  exchange(plain: Uint8Array, accept: (cmd: Uint8Array) => boolean, timeoutMs = 1000, note = "exchange"): Promise<Uint8Array | null> {
+    const run = () =>
+      new Promise<Uint8Array | null>((resolve, reject) => {
+        this.rawRx = [];
+        const finish = (r: Uint8Array | null) => {
+          clearTimeout(timer);
+          this.rawWaiter = null;
+          resolve(r);
+        };
+        const timer = setTimeout(() => {
+          this.log.add({ dir: "INFO", note: `No reply within ${timeoutMs} ms (${note})` });
+          finish(null);
+        }, timeoutMs);
+        this.rawWaiter = (c) => accept(c) && finish(c);
+        this.send(plain, note).catch((e) => {
+          clearTimeout(timer);
+          this.rawWaiter = null;
+          reject(e);
+        });
+      });
+    const p = this.queryChain.then(run, run);
+    this.queryChain = p.catch(() => undefined);
+    return p;
+  }
+
   /** Read the Card ID with the current magic; marks the link verified on a valid reply. */
   async verify(): Promise<number | null> {
     this.cardId = null;
@@ -156,6 +188,14 @@ export class RuidaLink {
   private handleRx(wire: Uint8Array): void {
     const plain = unswizzle(wire, this.magic);
     this.log.add({ dir: "RX", wire, plain });
+    if (this.rawWaiter) {
+      for (const b of plain) this.rawRx.push(b);
+      // A command is complete once the next one has started; a reply ending in 00 (a name) is complete on its own.
+      const cmds = splitCommands(Uint8Array.from(this.rawRx));
+      cmds.forEach((c, i) => {
+        if (i < cmds.length - 1 || c.at(-1) === 0x00) this.rawWaiter?.(c);
+      });
+    }
     if (!this.pending) return;
     for (const b of plain) this.rx.push(b);
     const { replies } = decodeReplies(Uint8Array.from(this.rx));

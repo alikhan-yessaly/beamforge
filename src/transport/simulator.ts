@@ -61,6 +61,13 @@ export class SimulatorTransport implements Transport {
   private jog: Jog | null = null;
   /** Commands of a job being received (between D8 1x and D7). */
   private jobCmds: Uint8Array[] | null = null;
+  /** Jobs stored in "memory" (like the RDC644XS in the LightBurn trace, which held RUN 1 and RUN 2). */
+  readonly files: { name: string; cmds: Uint8Array[] }[] = [
+    { name: "RUN 1", cmds: [] },
+    { name: "RUN 2", cmds: [] },
+  ];
+  /** E8 02 + E7 01 <name>: the next job is stored under this name instead of run. */
+  private storeAs: string | null = null;
   private jobState: SimJobState | null = null;
   private jobStart = { x: 0, y: 0 };
   private paused: { to: { x: number; y: number }; speed: number }[] = [];
@@ -155,8 +162,25 @@ export class SimulatorTransport implements Transport {
       if (a === 0xd7) {
         const cmds = this.jobCmds;
         this.jobCmds = null;
-        this.runJob(cmds);
+        if (this.storeAs !== null) {
+          this.files.push({ name: this.storeAs, cmds });
+          this.storeAs = null;
+        } else this.runJob(cmds);
       }
+      return;
+    }
+    if (a === 0xe8 && b === 0x02) {
+      this.storeAs = "";
+      return;
+    }
+    if (a === 0xe7 && b === 0x01 && this.storeAs !== null) {
+      this.storeAs = String.fromCharCode(...c.subarray(2, c.length - 1));
+      return;
+    }
+    if (a === 0xe8 && b === 0x01 && c.length >= 4) {
+      const i = (c[2]! << 7) | c[3]!;
+      const f = this.files[i - 1];
+      if (f) this.send(Uint8Array.of(0xe8, 0x01, c[2]!, c[3]!, ...Array.from(f.name, (ch) => ch.charCodeAt(0)), 0x00));
       return;
     }
     if (a === 0xd8 && (b === 0x10 || b === 0x11 || b === 0x12)) {
@@ -298,7 +322,7 @@ export class SimulatorTransport implements Transport {
       case 0x204:
         return 0x1000;
       case 0x205:
-        return 2;
+        return this.files.length;
       case 0x221:
         return Math.round(this.pos.x);
       case 0x231:
@@ -326,7 +350,10 @@ export class SimulatorTransport implements Transport {
 
   private reply(addr: number): void {
     const v = this.value(addr);
-    const plain = Uint8Array.of(0xda, 0x01, (addr >> 7) & 0x7f, addr & 0x7f, ...encodeInt35(v));
+    this.send(Uint8Array.of(0xda, 0x01, (addr >> 7) & 0x7f, addr & 0x7f, ...encodeInt35(v)));
+  }
+
+  private send(plain: Uint8Array): void {
     const wire = swizzle(plain, this.magic);
     const deliver = () => {
       if (this.open_) this.dataCbs.forEach((cb) => cb(wire));

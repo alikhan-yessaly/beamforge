@@ -3,6 +3,7 @@
 import { t } from "../i18n";
 import type { Doc, Layer, SceneObject, ScenePath } from "../scene/model";
 import { migrateDoc } from "../job/layers";
+import type { JobOrder } from "../job/plan";
 
 export const PROJECT_EXT = ".laserproj";
 export const PROJECT_FORMAT = "laserproj";
@@ -11,6 +12,8 @@ export const PROJECT_VERSION = 1;
 export interface ProjectJob {
   startFrom: "absolute" | "current";
   innerFirst: boolean;
+  /** Missing in older files: "auto". */
+  order?: JobOrder;
 }
 
 export interface ProjectMachine {
@@ -99,6 +102,7 @@ export function parseProject(text: string): ProjectFile {
     job: {
       startFrom: job.startFrom === "current" ? "current" : "absolute",
       innerFirst: job.innerFirst !== false,
+      order: job.order === "layer" || job.order === "object" ? job.order : "auto",
     },
     doc: migrateDoc({ objects, layers }),
   };

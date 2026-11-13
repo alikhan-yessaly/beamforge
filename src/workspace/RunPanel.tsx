@@ -15,6 +15,7 @@ import type { PointUm } from "../protocol/jobEncode";
 import { doc, notify, prefs, profile } from "../scene/store";
 import { jobEstimate, preview, togglePreview, toolpath } from "./job";
 import { confirmStart } from "./StartDialog";
+import { savingToMachine } from "./mode";
 
 /** Latest job progress (null before the first run). */
 export const runProgress = signal<JobProgress | null>(null);
@@ -26,9 +27,10 @@ export const framing = signal(false);
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-function prepareJob() {
+/** The current document as job commands (throws if it can't be built). */
+export function buildJobCommands() {
   const pr = prefs.value;
-  const built = buildJob(doc.value, profile.value, { mode: pr.startFrom, innerFirst: pr.innerFirst });
+  const built = buildJob(doc.value, profile.value, { mode: pr.startFrom, innerFirst: pr.innerFirst, order: pr.jobOrder });
   return { commands: encodeJobCommands(built.input), mode: built.input.mode, designOrigin: built.designOrigin };
 }
 
@@ -36,7 +38,7 @@ async function frame(): Promise<void> {
   const speed = profile.value.frameSpeed ?? 30;
   framing.value = true;
   try {
-    const job = prepareJob();
+    const job = buildJobCommands();
     await frameJob(motion, inspectJob(job.commands), speed, (p) => (headUm.value = p), (start) => {
       relativePlacement.value = job.mode === "current" ? { start, designOrigin: job.designOrigin } : null;
     });
@@ -50,9 +52,9 @@ async function frame(): Promise<void> {
 }
 
 async function start(): Promise<void> {
-  let job: ReturnType<typeof prepareJob>;
+  let job: ReturnType<typeof buildJobCommands>;
   try {
-    job = prepareJob();
+    job = buildJobCommands();
   } catch (e) {
     notify(errText(e), "error");
     return;
@@ -122,7 +124,7 @@ function blockReason(): { text: string; retry?: boolean } | null {
 
 export function RunPanel() {
   const p = runProgress.value;
-  const busy = runner.active || framing.value;
+  const busy = runner.active || framing.value || savingToMachine.value;
   const block = blockReason();
   const est = jobEstimate.value;
   const pct = p && est.total > 0 ? Math.min(100, (p.elapsed / est.total) * 100) : 0;
