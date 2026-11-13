@@ -18,7 +18,7 @@ const comp = (v: number) => fmtNum(v / 255, 3);
 
 export function writePdf(
   paths: ExportPath[],
-  opts: { keepPosition?: boolean; page?: { w: number; h: number }; marginMm?: number; title?: string } = {},
+  opts: { keepPosition?: boolean; page?: { w: number; h: number }; marginMm?: number; center?: boolean; title?: string } = {},
 ): Uint8Array {
   const lay = layoutExport(paths, opts);
   const wMm = Math.max(lay.w, 1);

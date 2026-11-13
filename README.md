@@ -34,7 +34,7 @@ simulator works without a machine.
   as sketches.
 - **Pictures:** trace PNG, JPEG, iPhone HEIC, BMP, GIF, WebP and AVIF pictures into vector shapes, in black and
   white or in colours, with a live preview. Each colour goes on its own layer.
-- **Export:** the selection or the whole drawing as SVG, DXF, PDF or PNG.
+- **Export:** the selection or the whole drawing as SVG, DXF, PDF, PNG or JPEG, with a preview.
 - **Layers:** each colour is a layer that either cuts outlines or fills (engraves) areas, with its own speed,
   power and passes. The Fill tool engraves any closed area in a colour of its own.
 - **Job planning:** fills always run before the cuts around them. Jobs run object by object, layer by layer, or
@@ -78,8 +78,13 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
     or cut.
   - The picture can stay on the canvas as a reference. It is never sent to the machine.
 - **Export** (⌘E or right-click → Export…) writes the selection or everything as SVG (one Inkscape layer per
-  colour), DXF, PDF (one layer per colour) or PNG (96–1000 DPI, optionally with a transparent background and the
-  pictures). It can keep the position on the bed, with the page set to the bed size.
+  colour), DXF, PDF (one layer per colour), PNG or JPEG, with a preview of the result.
+  - PDF pages: fit to the drawing, A5 to A1, Letter, Legal, Tabloid or the bed size. The drawing is centred at its
+    real size; the smallest A size that fits is suggested, and a drawing larger than the page is flagged.
+  - PNG and JPEG: resolution presets from 96 to 1000 DPI (254 DPI is 0.1 mm per pixel) or a custom pixels per mm.
+    The dialog shows the pixel size, megapixels and mm per pixel, and the resolution is saved in the file. PNG
+    can have a transparent background, JPEG has a quality setting, and pictures can be included.
+  - SVG, DXF, PNG and JPEG can keep the position on the bed.
 - **Sketch mode** is a small parametric CAD editor:
   - Drawing tools: line, rectangle, circle, arc, slot, polygon, spline, point and text.
   - Modify tools: trim, fillet, chamfer, offset, mirror, and linear, grid and circular patterns.

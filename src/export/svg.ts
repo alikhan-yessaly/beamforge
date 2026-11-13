@@ -50,8 +50,11 @@ export function groupLayers(paths: ExportPath[]): ExportLayer[] {
   return [...map.values()];
 }
 
-/** Page size and offset. Without keepPosition the drawing's box moves to the page corner (plus margin). */
-export function layoutExport(paths: ExportPath[], opts: { keepPosition?: boolean; page?: { w: number; h: number }; marginMm?: number }): ExportLayout {
+/**
+ * Page size and offset. Without keepPosition the drawing's box moves to the page corner (plus margin), or to the
+ * middle of the page with `center`.
+ */
+export function layoutExport(paths: ExportPath[], opts: { keepPosition?: boolean; page?: { w: number; h: number }; marginMm?: number; center?: boolean }): ExportLayout {
   const used = paths.filter((p) => p.points.length >= 2);
   const has = used.length > 0;
   const b = pathsBox(used);
@@ -61,6 +64,9 @@ export function layoutExport(paths: ExportPath[], opts: { keepPosition?: boolean
   }
   const bw = has ? b.maxX - b.minX : 0;
   const bh = has ? b.maxY - b.minY : 0;
+  if (opts.center && opts.page) {
+    return { w: opts.page.w, h: opts.page.h, dx: (opts.page.w - bw) / 2 - (has ? b.minX : 0), dy: (opts.page.h - bh) / 2 - (has ? b.minY : 0) };
+  }
   return {
     w: opts.page?.w ?? bw + 2 * margin,
     h: opts.page?.h ?? bh + 2 * margin,

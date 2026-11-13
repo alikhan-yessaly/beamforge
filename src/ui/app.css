@@ -396,7 +396,14 @@ body > #workspace { height: 100%; border: 0; }
 
 /* Import and export dialogs (src/workspace/ImportDialog.tsx, ExportDialog.tsx) */
 .ws-import-dialog { width: min(920px, 94vw); }
-.ws-export-dialog { width: min(420px, 94vw); }
+.ws-export-dialog { width: min(860px, 94vw); }
+.ws-export-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1rem; align-items: start; }
+.ws-export-preview { height: 360px; background: #e9ebef; }
+.ws-export-facts { max-width: none; margin: .4rem 0 0; line-height: 1.45; }
+.ws-export-body .ws-plan-msg { margin: .4rem 0 0; }
+.ws-dialog .ws-link-btn { align-self: flex-start; border: 0; background: none; padding: .15rem 0; color: var(--ws-select); font: inherit; font-size: .82rem; cursor: pointer; text-align: left; }
+.ws-dialog .ws-link-btn:hover { text-decoration: underline; }
+@media (max-width: 760px) { .ws-export-body { grid-template-columns: 1fr; } }
 .ws-import-preview { width: 100%; height: 300px; display: block; border: 1px solid var(--ui-border); border-radius: 6px; background: #fff; }
 .ws-import-raster { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 1rem; align-items: start; }
 .ws-import-raster .ws-import-preview { height: 420px; }
