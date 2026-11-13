@@ -34,8 +34,9 @@ simulator works without a machine.
 - **Design:** import DXF, SVG, PDF, Illustrator (AI), PLT/HPGL and CorelDRAW (preview) files, or create
   parametric sketches (dimensions, constraints, fillets, patterns, text). Imported DXF files can also be edited
   as sketches.
-- **Pictures:** trace PNG, JPEG, iPhone HEIC, BMP, GIF, WebP and AVIF pictures into vector shapes, in black and
-  white or in colours, with a live preview. Each colour goes on its own layer.
+- **Pictures:** trace PNG, JPEG, iPhone HEIC, BMP, GIF, WebP and AVIF pictures into vector shapes. The app looks at
+  the picture and picks the settings itself: colours or black and white, centre lines for line drawings, and a cut
+  outline around stickers and logos. A few other versions are shown side by side to pick from.
 - **Smooth outlines:** jagged imports (pixel stair-steps, zigzags, wobble) are smoothed into clean curves and long
   lines, so the laser doesn't stutter through hundreds of tiny moves. Sharp corners stay sharp.
 - **Export:** the selection or the whole drawing as SVG, DXF, PDF, PNG or JPEG, with a preview.
@@ -109,7 +110,16 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
   The dialog shows the segment count before and after.
 - CorelDRAW (`.cdr`) files are imported on a best-effort basis: the preview picture stored in the file is traced.
   For the real vectors, export SVG or PDF from CorelDRAW.
-- Pictures open a tracing dialog with a live preview:
+- Pictures open a tracing dialog with a live preview, already set up for the picture:
+  - **Automatic:** the backdrop (plain light, plain dark, transparent or a busy photo), the real ink colours
+    (anti-aliased edges don't count as colours), photo or flat artwork, and the stroke width decide the trace.
+    Up to three other versions appear as thumbnails (outlines or centre lines, colours or black & white, with or
+    without the cut outline, bolder or finer). The detailed controls sit under **Fine-tune**.
+  - **Centre lines:** thin strokes become single open lines along their middle, one pass each, instead of two
+    outlines around every stroke.
+  - **Sticker style:** artwork on a plain backdrop gets a cut outline around the whole design (1.5 mm out by
+    default, holes ignored), and the inside is engraved. It can be turned off or given another margin.
+  - **Cut-out pictures:** a picture with a transparent background can be traced by its shape.
   - Black & white: threshold (or automatic), brightness, contrast, blur and invert.
   - Colours: 2 to 8 colours, each on its own layer; the white background can be left out.
   - Despeckle, corner smoothing, outline smoothing (Light by default), detail level, the width in millimetres, and

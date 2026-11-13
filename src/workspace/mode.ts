@@ -18,6 +18,13 @@ export const savingToMachine = signal(false);
 /** Machine work in progress: the job can't be edited (or the mode changed) until it ends. */
 export const machineBusy = () => runner.active || framing.value || savingToMachine.value;
 
+// Closing or reloading the tab mid-job drops the serial link: the machine keeps the buffered part and stops.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", (e) => {
+    if (machineBusy()) e.preventDefault();
+  });
+}
+
 /** Why the design can't be prepared as a job, or null. */
 export function prepareProblem(): string | null {
   if (toolpath.value.errors.length) return toolpath.value.errors[0]!;

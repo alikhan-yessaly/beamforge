@@ -10,6 +10,7 @@ import {
   objectScale,
   objectBox,
   pasteObjects,
+  removeSelected,
   rotateAbout,
   selectionBox,
   setObjectScale,
@@ -86,6 +87,13 @@ describe("ops", () => {
     const b = selectionBox(centerOnBed(doc, AB, TL), AB)!;
     close((b.minX + b.maxX) / 2, 300);
     close((b.minY + b.maxY) / 2, 200);
+  });
+
+  it("returns the same doc when nothing is selected (no empty undo step)", () => {
+    const none = new Set<string>(["missing"]);
+    expect(transformSelected(doc, none, translate(5, 5))).toBe(doc);
+    expect(removeSelected(doc, new Set())).toBe(doc);
+    expect(mirror(doc, none, "h")).toBe(doc);
   });
 
   it("rotates about a point and keeps the size", () => {

@@ -37,6 +37,8 @@ export function selectionBox(doc: Doc, ids: ReadonlySet<string>): Box | null {
 
 /** Pre-multiply world matrix m onto the selected objects. */
 export function transformSelected(doc: Doc, ids: ReadonlySet<string>, m: Mat): Doc {
+  // Nothing selected: the same doc, so commit() records no empty undo step and the job isn't replanned.
+  if (!doc.objects.some((o) => ids.has(o.id))) return doc;
   return { ...doc, objects: doc.objects.map((o) => (ids.has(o.id) ? { ...o, mat: mul(m, o.mat) } : o)) };
 }
 
@@ -115,6 +117,7 @@ export function mirror(doc: Doc, ids: ReadonlySet<string>, axis: "h" | "v"): Doc
 }
 
 export function removeSelected(doc: Doc, ids: ReadonlySet<string>): Doc {
+  if (!doc.objects.some((o) => ids.has(o.id))) return doc;
   return { ...doc, objects: doc.objects.filter((o) => !ids.has(o.id)) };
 }
 

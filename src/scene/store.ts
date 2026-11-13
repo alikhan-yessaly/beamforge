@@ -20,11 +20,13 @@ function load<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
-function save(key: string, v: unknown): void {
+function save(key: string, v: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(v));
+    return true;
   } catch {
     /* quota or private mode: autosave is best-effort */
+    return false;
   }
 }
 
@@ -203,19 +205,32 @@ export function notify(text: string, kind: "info" | "warn" | "error" = "info"): 
 
 // Autosave (debounced for the document; live drags write the signal many times per second).
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
-effect(() => {
-  const d = doc.value;
+let saveWarned = false;
+function saveDoc(): void {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => save(DOC_KEY, d), 500);
+  saveTimer = undefined;
+  if (save(DOC_KEY, doc.peek())) saveWarned = false;
+  else if (!saveWarned) {
+    // Usually the browser's storage is full (big pictures): say so once instead of silently losing work.
+    saveWarned = true;
+    notify(t("The design is too big to keep in the browser between visits. Save it as a project file."), "warn");
+  }
+}
+effect(() => {
+  void doc.value;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDoc, 500);
 });
+// Closing the tab within the debounce would lose the last change.
+if (typeof window !== "undefined") window.addEventListener("pagehide", () => saveTimer !== undefined && saveDoc());
 effect(() => {
   const p = profile.value;
   const list = machines.peek();
   machines.value = list.some((m) => m.id === p.id) ? list.map((m) => (m.id === p.id ? p : m)) : [...list, p];
 });
-effect(() => save(MACHINES_KEY, { active: profile.value.id, list: machines.value }));
-effect(() => save(PROFILE_KEY, profile.value));
-effect(() => save(PREFS_KEY, prefs.value));
+effect(() => void save(MACHINES_KEY, { active: profile.value.id, list: machines.value }));
+effect(() => void save(PROFILE_KEY, profile.value));
+effect(() => void save(PREFS_KEY, prefs.value));
 
 /** Start over with `next` (New / Open project): clears the selection and the undo history. */
 export function resetDoc(next: Doc): void {

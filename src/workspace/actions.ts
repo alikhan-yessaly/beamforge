@@ -108,7 +108,20 @@ async function importOne(f: File): Promise<void> {
   throw new Error(t("This file type isn't supported. Import DXF, SVG, PDF, AI, PLT/HPGL, CDR, or a picture (PNG, JPEG, HEIC, BMP, GIF, WebP)."));
 }
 
-export async function importFiles(files: Iterable<File>): Promise<void> {
+// Imports run one after another: the import dialog shows one file at a time, and a second drop or paste while it
+// is open would otherwise replace the first request and leave it unanswered.
+let importQueue: Promise<void> = Promise.resolve();
+export function importFiles(files: Iterable<File>): Promise<void> {
+  const list = [...files];
+  importQueue = importQueue.then(() => importNow(list));
+  return importQueue;
+}
+
+async function importNow(files: File[]): Promise<void> {
+  if (sketchSession.value) {
+    notify(t("Finish or cancel the sketch before importing."), "warn");
+    return;
+  }
   for (const f of files) {
     try {
       await importOne(f);

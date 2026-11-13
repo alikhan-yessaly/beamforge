@@ -10,6 +10,7 @@ import type { PdfDoc } from "../import/pdf";
 import { type DecodedImage, keepableUrl, pixels } from "../import/raster";
 import { SMOOTH_MAX_MM, SMOOTH_MIN_MM, SMOOTH_MM, type SmoothLevel, clampSmoothMm, segmentCount, smoothImport, suggestedLevel } from "../import/smooth";
 import { DEFAULT_TRACE, type TraceResult, type TraceSettings } from "../import/trace/pipeline";
+import { type TraceVariant, analyzeImage, autoSettings, traceVariants } from "../import/trace/analyze";
 import type { Rgba, VectorImport } from "../import/types";
 import { PALETTE } from "../job/layers";
 import { type Doc, type MachineProfile, type SceneObject, newId } from "../scene/model";
@@ -129,8 +130,16 @@ function Warnings({ list }: { list: string[] }) {
 function drawPreview(c: HTMLCanvasElement | null, vi: VectorImport | null, target: (key: string) => string | null, fills: FillsAs, under?: { img: ImageBitmap; w: number; h: number } | null) {
   if (!c) return;
   if (!c.clientWidth) {
-    // The dialog isn't laid out yet on first render: draw on the next frame.
-    requestAnimationFrame(() => c.isConnected && c.clientWidth && drawPreview(c, vi, target, fills, under));
+    // The dialog isn't laid out yet on first render: draw once it is. Animation frames pause in a hidden tab, so a
+    // timer backs them up.
+    let done = false;
+    const retry = () => {
+      if (done || !c.isConnected) return;
+      done = true;
+      drawPreview(c, vi, target, fills, under);
+    };
+    requestAnimationFrame(retry);
+    setTimeout(retry, 100);
     return;
   }
   const dpr = window.devicePixelRatio || 1;
@@ -160,18 +169,28 @@ function drawPreview(c: HTMLCanvasElement | null, vi: VectorImport | null, targe
     ctx.globalAlpha = 1;
   }
   if (!vi) return;
+  const at = (q: { x: number; y: number }) => [ox + (q.x - minX) * k, oy + (q.y - minY) * k] as const;
+  // Engraved areas: every closed shape of one layer colour in one even-odd fill, so holes stay open.
+  const areas = new Map<string, Path2D>();
+  for (const p of vi.paths) {
+    const f = p.fill && p.closed && p.points.length > 2 && fills === "engrave" ? target(`f:${p.fill}`) : null;
+    if (!f) continue;
+    let a = areas.get(f);
+    if (!a) areas.set(f, (a = new Path2D()));
+    p.points.forEach((q, i) => (i ? a.lineTo : a.moveTo).call(a, ...at(q)));
+    a.closePath();
+  }
+  ctx.globalAlpha = 0.35;
+  for (const [color, a] of areas) {
+    ctx.fillStyle = color;
+    ctx.fill(a, "evenodd");
+  }
+  ctx.globalAlpha = 1;
   for (const p of vi.paths) {
     if (p.points.length < 2) continue;
     ctx.beginPath();
-    p.points.forEach((q, i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, ox + (q.x - minX) * k, oy + (q.y - minY) * k));
+    p.points.forEach((q, i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, ...at(q)));
     if (p.closed) ctx.closePath();
-    const f = p.fill && p.closed && fills === "engrave" ? target(`f:${p.fill}`) : null;
-    if (f) {
-      ctx.fillStyle = f;
-      ctx.globalAlpha = 0.35;
-      ctx.fill("evenodd");
-      ctx.globalAlpha = 1;
-    }
     const s = p.stroke ? target(`s:${p.stroke}`) : p.fill && fills !== "ignore" ? target(`f:${p.fill}`) : null;
     ctx.strokeStyle = s ?? "#cbd5e1";
     ctx.lineWidth = s ? 1 : 0.5;
@@ -264,23 +283,28 @@ function VectorBody({ req, finish }: { req: Extract<Request, { kind: "vector" }>
 
 const DETAIL = [600, 1000, 1600, 2400];
 
-let worker: Worker | null = null;
-let jobId = 0;
-function traceInWorker(img: Rgba, settings: TraceSettings): Promise<TraceResult> {
-  worker ??= new Worker(new URL("../import/trace/worker.ts", import.meta.url), { type: "module" });
-  const id = ++jobId;
-  return new Promise((resolve, reject) => {
-    const w = worker!;
-    const on = (e: MessageEvent<{ id: number; result?: TraceResult; error?: string }>) => {
-      if (e.data.id !== id) return;
-      w.removeEventListener("message", on);
-      if (e.data.error) reject(new Error(e.data.error));
-      else resolve(e.data.result!);
-    };
-    w.addEventListener("message", on);
-    w.postMessage({ id, img, settings });
-  });
+/** A trace worker of its own: one for the full preview, one for the variant thumbnails, so neither waits on the other. */
+function tracer(): (img: Rgba, settings: TraceSettings) => Promise<TraceResult> {
+  let worker: Worker | null = null;
+  let jobId = 0;
+  return (img, settings) => {
+    worker ??= new Worker(new URL("../import/trace/worker.ts", import.meta.url), { type: "module" });
+    const id = ++jobId;
+    return new Promise((resolve, reject) => {
+      const w = worker!;
+      const on = (e: MessageEvent<{ id: number; result?: TraceResult; error?: string }>) => {
+        if (e.data.id !== id) return;
+        w.removeEventListener("message", on);
+        if (e.data.error) reject(new Error(e.data.error));
+        else resolve(e.data.result!);
+      };
+      w.addEventListener("message", on);
+      w.postMessage({ id, img, settings });
+    });
+  };
 }
+const traceInWorker = tracer();
+const traceThumb = tracer();
 
 /** Default printed width: the file's DPI if it has one, else 100 mm; never wider than 80 % of the bed. */
 function defaultWidth(img: DecodedImage, p: MachineProfile): number {
@@ -291,9 +315,13 @@ function defaultWidth(img: DecodedImage, p: MachineProfile): number {
 
 function RasterBody({ req, finish }: { req: Extract<Request, { kind: "raster" }>; finish: (o: ImportOutcome | null) => void }) {
   const img = req.img;
-  const [s, setS] = useState({ ...DEFAULT_TRACE });
-  const [detail, setDetail] = useState(1000);
   const [widthMm, setWidthMm] = useState(() => defaultWidth(img, profile.value));
+  // Automatic settings: a small copy of the picture is analysed once, and the first variant is the auto choice.
+  const small = useMemo(() => pixels(img, 400, 4), [img]);
+  const analysis = useMemo(() => analyzeImage(small), [small]);
+  const variants = useMemo(() => traceVariants(analysis, widthMm / small.width), [analysis]);
+  const [s, setS] = useState(() => ({ ...DEFAULT_TRACE, ...autoSettings(analysis, widthMm / small.width), background: analysis.bg }));
+  const [detail, setDetail] = useState(1000);
   const [doTrace, setDoTrace] = useState(true);
   const [keep, setKeep] = useState(true);
   const [result, setResult] = useState<TraceResult | null>(null);
@@ -349,6 +377,7 @@ function RasterBody({ req, finish }: { req: Extract<Request, { kind: "raster" }>
   };
 
   const bw = s.mode === "bw";
+  const alpha = analysis.background === "transparent";
   const nothing = !keep && !(doTrace && result?.paths.length);
   return (
     <>
@@ -370,6 +399,9 @@ function RasterBody({ req, finish }: { req: Extract<Request, { kind: "raster" }>
           <label class="ws-check">
             <input type="checkbox" checked={doTrace} onChange={(e) => setDoTrace(e.currentTarget.checked)} /> {t("Trace into vector shapes")}
           </label>
+          {doTrace && <Variants list={variants} current={s} small={small} widthMm={widthMm} onPick={(v) => set(v.settings)} />}
+          <details class="ws-import-fine">
+          <summary>{t("Fine-tune")}</summary>
           <fieldset disabled={!doTrace}>
             <div class="ws-segmented" role="group" aria-label={t("Trace mode")}>
               <button type="button" class={bw ? "active" : ""} aria-pressed={bw} onClick={() => set({ mode: "bw" })}>
@@ -379,7 +411,34 @@ function RasterBody({ req, finish }: { req: Extract<Request, { kind: "raster" }>
                 {t("Colours")}
               </button>
             </div>
-            {bw ? (
+            <label>
+              <span>{t("Lines")}</span>
+              <select value={s.lines} onChange={(e) => set({ lines: e.currentTarget.value as "outline" | "centerline" })}>
+                <option value="outline">{t("Outlines around shapes")}</option>
+                <option value="centerline">{t("Centre lines (one pass per stroke)")}</option>
+              </select>
+            </label>
+            <label class="ws-check">
+              <input type="checkbox" checked={s.sticker} onChange={(e) => set({ sticker: e.currentTarget.checked })} /> {t("Cut outline around the design")}
+            </label>
+            {s.sticker && (
+              <label>
+                <span>{t("Outline margin")}</span>
+                <span class="ws-row">
+                  <input type="number" min={0} max={20} step={0.5} value={s.stickerMarginMm} onChange={(e) => set({ stickerMarginMm: Math.max(0, Math.min(20, Number(e.currentTarget.value) || 0)) })} /> mm
+                </span>
+              </label>
+            )}
+            {bw && alpha && (
+              <label class="ws-check">
+                <input type="checkbox" checked={s.source === "alpha"} onChange={(e) => set({ source: e.currentTarget.checked ? "alpha" : "brightness" })} /> {t("Trace the picture's cut-out shape")}
+              </label>
+            )}
+            {bw && s.source === "alpha" ? (
+              <label class="ws-check">
+                <input type="checkbox" checked={s.invert} onChange={(e) => set({ invert: e.currentTarget.checked })} /> {t("Invert")}
+              </label>
+            ) : bw ? (
               <>
                 <label>
                   <span>
@@ -425,14 +484,17 @@ function RasterBody({ req, finish }: { req: Extract<Request, { kind: "raster" }>
                 ))}
               </select>
             </label>
-            <label>
-              <span>{t("Traced shapes")}</span>
-              <select value={s.result} onChange={(e) => set({ result: e.currentTarget.value as "engrave" | "cut" })}>
-                <option value="engrave">{t("Engrave the areas (fill)")}</option>
-                <option value="cut">{t("Cut the outlines")}</option>
-              </select>
-            </label>
+            {s.lines === "outline" && (
+              <label>
+                <span>{t("Traced shapes")}</span>
+                <select value={s.result} onChange={(e) => set({ result: e.currentTarget.value as "engrave" | "cut" })}>
+                  <option value="engrave">{t("Engrave the areas (fill)")}</option>
+                  <option value="cut">{t("Cut the outlines")}</option>
+                </select>
+              </label>
+            )}
           </fieldset>
+          </details>
           <label class="ws-check">
             <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.currentTarget.checked)} /> {t("Keep the picture on the canvas")}
           </label>
@@ -457,6 +519,43 @@ function RasterBody({ req, finish }: { req: Extract<Request, { kind: "raster" }>
         </button>
       </div>
     </>
+  );
+}
+
+/** The automatic choice and its alternatives as small traced thumbnails; clicking one applies its settings. */
+function Variants({ list, current, small, widthMm, onPick }: { list: TraceVariant[]; current: Omit<TraceSettings, "mmPerPx">; small: Rgba; widthMm: number; onPick: (v: TraceVariant) => void }) {
+  const [shots, setShots] = useState<Record<string, TraceResult>>({});
+  const refs = useRef<Record<string, HTMLCanvasElement | null>>({});
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      for (const v of list) {
+        const r = await traceThumb(small, { ...current, ...v.settings, mmPerPx: widthMm / small.width }).catch(() => null);
+        if (!live) return;
+        if (r) setShots((o) => ({ ...o, [v.id]: r }));
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [list, small]);
+  useEffect(() => {
+    for (const v of list) drawPreview(refs.current[v.id] ?? null, shots[v.id] ?? null, (key) => key.slice(2), "engrave");
+  }, [shots]);
+  const active = list.find((v) => (Object.keys(v.settings) as (keyof TraceVariant["settings"])[]).every((k) => v.settings[k] === current[k]));
+  return (
+    <div class="ws-import-variants" role="group" aria-label={t("Suggested versions")}>
+      {list.map((v) => (
+        <button key={v.id} type="button" class={active?.id === v.id ? "active" : ""} aria-pressed={active?.id === v.id} onClick={() => onPick(v)}>
+          <canvas
+            ref={(c) => {
+              refs.current[v.id] = c;
+            }}
+          />
+          <span>{t(v.label)}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 

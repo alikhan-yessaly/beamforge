@@ -23,11 +23,18 @@ function rng(seed: number): () => number {
   };
 }
 
-export function quantize(img: Rgba, colors: number, opts: { ignoreWhite?: boolean } = {}): Quantized {
+/**
+ * `ignoreWhite` drops the cluster nearest white when it is near white; `background` drops the cluster nearest that
+ * colour (a plain paper or backdrop colour found by analyzeImage) when it is close to it.
+ */
+export function quantize(img: Rgba, colors: number, opts: { ignoreWhite?: boolean; background?: [number, number, number] | null } = {}): Quantized {
   const n = img.width * img.height;
   const d = img.data;
   const index = new Uint8Array(n).fill(255);
-  const k = Math.max(1, Math.min(16, Math.round(colors)));
+  // `colors` counts inks: when a backdrop is to be dropped it takes a cluster of its own, so ask k-means for one more.
+  const dropRef = opts.ignoreWhite !== false && !!(opts.background ?? opts.ignoreWhite);
+  const inks = Math.max(1, Math.min(16, Math.round(colors)));
+  const k = Math.min(16, inks + (dropRef ? 1 : 0));
 
   // Subsample opaque pixels (at most ~20k) so seeding and iterations stay fast on big images.
   let opaque = 0;
@@ -160,22 +167,36 @@ export function quantize(img: Rgba, colors: number, opts: { ignoreWhite?: boolea
 
   // Background: the cluster nearest white, if it really is near white (otherwise there is no paper colour to drop).
   let bg = -1;
-  if (opts.ignoreWhite) {
+  const ref = opts.background ?? (opts.ignoreWhite ? [255, 255, 255] : null);
+  if (ref && opts.ignoreWhite !== false) {
     let bd = Infinity;
     for (let c = 0; c < kk; c++) {
-      const dd = (255 - cr[c]) ** 2 + (255 - cg[c]) ** 2 + (255 - cb[c]) ** 2;
+      const dd = (ref[0] - cr[c]) ** 2 + (ref[1] - cg[c]) ** 2 + (ref[2] - cb[c]) ** 2;
       if (dd < bd) {
         bd = dd;
         bg = c;
       }
     }
-    if (bd > 110 * 110) bg = -1;
+    if (bd > (opts.background ? 70 * 70 : 110 * 110)) bg = -1;
   }
 
   // Keep non-empty clusters, most common first.
   const order: number[] = [];
   for (let c = 0; c < kk; c++) if (c !== bg && counts[c] > 0) order.push(c);
   order.sort((a, b) => counts[b] - counts[a] || a - b);
+  // No backdrop after all: the spare cluster joins its nearest neighbour so there are at most `inks` colours.
+  while (order.length > inks) {
+    const c0 = order.pop()!;
+    let near = order[0]!, nd = Infinity;
+    for (const c of order) {
+      const dd = (cr[c] - cr[c0]) ** 2 + (cg[c] - cg[c0]) ** 2 + (cb[c] - cb[c0]) ** 2;
+      if (dd < nd) {
+        nd = dd;
+        near = c;
+      }
+    }
+    for (let i = 0; i < n; i++) if (raw[i] === c0) raw[i] = near;
+  }
   const remap = new Uint8Array(kk).fill(255);
   order.forEach((c, i) => (remap[c] = i));
   for (let i = 0; i < n; i++) if (raw[i] !== 255) index[i] = remap[raw[i]];
