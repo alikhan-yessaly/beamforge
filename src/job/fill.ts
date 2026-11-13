@@ -4,7 +4,7 @@
 import { t } from "../i18n";
 import ClipperLib, { type PolyNodeType } from "clipper-lib";
 import { type Vec, pathsBox } from "../geom/geom";
-import { DEFAULT_PROFILE } from "../scene/model";
+import { DEFAULT_PROFILE, type SweepMode } from "../scene/model";
 import { orderItems, travelTime } from "./order";
 
 export type FillPattern = "lines" | "cross" | "dots" | "offset";
@@ -28,8 +28,11 @@ export interface FillResult {
   error?: string;
 }
 
-/** Burn polylines for the closed polygons, in burn order, starting near `from` when given. */
-export function fillPaths(polys: Vec[][], s: FillSettings, from?: Vec): FillResult {
+/**
+ * Burn polylines for the closed polygons, in burn order, starting near `from` when given. `sweep` "together" sweeps
+ * every part that shares rows in one go (row by row across the gaps); otherwise the quicker choice per pair.
+ */
+export function fillPaths(polys: Vec[][], s: FillSettings, from?: Vec, sweep: SweepMode = "quick"): FillResult {
   const rings = polys.filter((p) => p.length >= 3);
   const interval = Math.max(0.01, s.interval);
   if (rings.length === 0) return { paths: [] };
@@ -37,16 +40,16 @@ export function fillPaths(polys: Vec[][], s: FillSettings, from?: Vec): FillResu
     let paths: Vec[][];
     switch (s.pattern) {
       case "lines":
-        paths = hatch(rings, s.angle, interval, "lines", from);
+        paths = hatch(rings, s.angle, interval, "lines", from, sweep);
         break;
       case "cross": {
         // The second direction starts where the first one ended.
-        const first = hatch(rings, s.angle, interval, "lines", from);
-        paths = [...first, ...hatch(rings, s.angle + 90, interval, "lines", first.at(-1)?.at(-1) ?? from)];
+        const first = hatch(rings, s.angle, interval, "lines", from, sweep);
+        paths = [...first, ...hatch(rings, s.angle + 90, interval, "lines", first.at(-1)?.at(-1) ?? from, sweep)];
         break;
       }
       case "dots":
-        paths = hatch(rings, s.angle, interval, "dots", from);
+        paths = hatch(rings, s.angle, interval, "dots", from, sweep);
         break;
       case "offset":
         paths = orderContours(contours(rings, interval), from);
@@ -83,7 +86,7 @@ interface Span {
  * cell is swept on its own, back and forth (bidirectional), so a sweep never jumps across a gap on every row.
  * The sweeps are ordered by travel time from `from` (`order.ts`), each entered at whichever corner suits.
  */
-function hatch(rings: Vec[][], angleDeg: number, interval: number, kind: "lines" | "dots", from?: Vec): Vec[][] {
+function hatch(rings: Vec[][], angleDeg: number, interval: number, kind: "lines" | "dots", from?: Vec, sweep: SweepMode = "quick"): Vec[][] {
   const a = (angleDeg * Math.PI) / 180;
   const [c, s] = [Math.cos(-a), Math.sin(-a)];
   const local = rings.map((r) => r.map((p) => rot(p, c, s)));
@@ -140,7 +143,7 @@ function hatch(rings: Vec[][], angleDeg: number, interval: number, kind: "lines"
     });
   }
   // Sweeps: groups of cells swept together, row by row.
-  const groups = groupCells(cells, interval);
+  const groups = groupCells(cells, interval, sweep === "together");
   const pieces = (sp: Span, rev: boolean): Vec[][] => {
     if (kind === "lines") return [rev ? [back({ x: sp.r, y: sp.y }), back({ x: sp.l, y: sp.y })] : [back({ x: sp.l, y: sp.y }), back({ x: sp.r, y: sp.y })]];
     // Dots on a fixed grid (aligned across rows), only where the grid point lies inside the span.
@@ -202,9 +205,10 @@ const CELL_GROUP_LIMIT = 2000;
 
 /**
  * Which cells to sweep together: two cells that share rows, when crossing the gap between them on every shared
- * row is shorter than jumping from one to the other once (centre to centre). Rows are `interval` apart.
+ * row is shorter than jumping from one to the other once (centre to centre), or always with `together`. Rows are
+ * `interval` apart.
  */
-function groupCells(cells: Span[][], interval: number): Span[][][] {
+function groupCells(cells: Span[][], interval: number, together = false): Span[][][] {
   if (cells.length > CELL_GROUP_LIMIT) return cells.map((c) => [c]);
   const box = cells.map((cell) => {
     let [x0, x1] = [Infinity, -Infinity];
@@ -220,7 +224,7 @@ function groupCells(cells: Span[][], interval: number): Span[][][] {
       if (shared <= 0) continue;
       const gap = Math.max(0, B.x0 - A.x1, A.x0 - B.x1);
       const jump = Math.hypot((A.x0 + A.x1 - B.x0 - B.x1) / 2, (A.y0 + A.y1 - B.y0 - B.y1) / 2);
-      if (shared * gap < jump) parent[find(i)] = find(j);
+      if (together || shared * gap < jump) parent[find(i)] = find(j);
     }
   }
   const groups = new Map<number, Span[][]>();

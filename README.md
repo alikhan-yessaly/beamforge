@@ -44,9 +44,15 @@ simulator works without a machine.
 - **Device mode:** a read-only view of the prepared job, with its time, size and cut order. From here you can
   frame, start, pause and stop the job, or save it in the controller's memory to start later from the machine's
   panel.
+- **Machine tuning:** keep several machine profiles, matched to the connected controller automatically. Pick a
+  machine class for typical values, then tune it with guided test cards (engraving evenness, scan offset, power and
+  speed, kerf) that you read back by clicking a drawing of the card.
+- **Even engraving:** before a job, the app predicts where engraving will burn deeper (row ends, small letters) and
+  offers fixes with their time cost: overscan, sweeping areas together, or a lower corner power.
 - **Machine control:** see the head position, jog, go to a point, and use a software Stop. The bed size is read
   from the controller.
-- **Projects:** save and open `.laserproj` files, export Ruida `.rd` job files, and keep a material library.
+- **Projects:** save and open `.laserproj` files (with the materials they use), export Ruida `.rd` job files, keep a
+  material library per machine, and save a machine's tuning as a `.beamtune` file.
 - **Languages:** English, Kazakh and Russian.
 
 ## Screenshots
@@ -113,7 +119,15 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
 - Fill patterns: lines, cross-hatch, dots and offset contours, with spacing and angle. Holes stay empty.
 - The **Fill tool** engraves the inside of any closed shape in its own colour, so "engrave the face, then cut the
   part out" takes two colours with separate settings.
-- A **material library** stores speed, power and passes per material, for each machine profile.
+- A **material library** stores engrave, cut and score settings per material, for each machine profile. Typical
+  settings for the machine's class (plywood, acrylic, cardboard, leather) can be added in one click, and cut
+  presets can carry a kerf.
+- **Overscan** (fill layers): the laser stays off while the head speeds up and slows down at each row end, so the
+  edges burn as deep as the middle. Auto uses the machine's acceleration.
+- **Sweep:** areas that share rows can be swept together (they burn alike) or each on its own; the default picks
+  the quicker.
+- **Kerf compensation** (cut layers): outlines grow and holes shrink by half the kerf, so parts come out at their
+  drawn size. **Scan offset** lines up rows engraved in opposite directions.
 
 ### Job planning and preview
 
@@ -136,6 +150,22 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
   - Offset contours run from the outside in.
 - The **preview** draws the toolpath, including travel moves, with a time scrubber. The time estimate uses the
   machine profile's travel speed and acceleration.
+
+### Machine profiles and tuning
+
+- Keep several **machine profiles**. On connect the app picks the one that belongs to the controller (Card ID and
+  bed size) and asks when that's unclear.
+- A new profile asks its **machine class** (40–60 W desktop, 60–100 W, 100–150 W large bed, or other), which sets
+  typical acceleration, start speed and lowest firing power. These are starting values, not measurements.
+- **Tuning** (Machine tab) is a guided, skippable wizard with four test cards, each placed near the home corner on
+  free colours:
+  - **Fill evenness:** measures the acceleration and which fix evens out engraving depth.
+  - **Scan offset:** the shift that lines up back-and-forth rows, per speed.
+  - **Power and speed:** a grid whose chosen squares become the material's presets.
+  - **Kerf:** holes and a peg; the snug hole gives the kerf.
+- Before a job, **Before you start** in Device mode lists layers predicted to engrave unevenly, with each fix's
+  time cost; one click applies it.
+- **Advanced** mode (status bar) shows every raw value. A machine's tuning and materials save as a `.beamtune` file.
 
 ### Device mode and running jobs
 
@@ -193,7 +223,9 @@ machine's own Stop or emergency stop.
 Only one RDC644XS machine has been tested. Compatibility with other machines,
 firmware and controllers is not established. Fill, sketch-generated cuts,
 object-by-object job order, large jobs and recovery after connection problems
-need further hardware validation.
+need further hardware validation. Overscan, scan offset, kerf compensation and
+the tuning test cards have been checked in the simulator only, and the machine
+class values are typical, not measured.
 
 ## Get started
 
@@ -221,7 +253,9 @@ Run `npm test` and `npm run build` to validate changes.
 src/protocol/    Ruida wire format: byte scrambling, numbers, commands, job encoder and decoder
 src/controller/  Link (Card ID gate, queries), motion, job runner, stored files, frame
 src/transport/   Web Serial, simulator, WebSocket bridge, traffic log
-src/job/         Planning: layers, fill paths, cut order, time estimate, doc → job
+src/job/         Planning: layers, fill paths, cut order, time estimate, depth checks, kerf, doc → job
+src/machine/     Machine classes, motion model, material presets, .beamtune files
+src/tuning/      Test cards and reading their results
 src/sketch/      Parametric sketch model, constraint solver (planegcs), modify tools, text
 src/dxf/         DXF parser
 src/import/      SVG, PDF, HPGL and CDR readers, picture decoding and tracing (Potrace port)

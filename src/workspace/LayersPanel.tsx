@@ -6,11 +6,13 @@ import { IconButton, IconToggle } from "../ui/icons";
 import { buildRdFile } from "../job/build";
 import { formatDuration } from "../job/estimate";
 import { activeLayers, moveLayer, powerLinked, updateLayer } from "../job/layers";
-import { type Layer, type LayerMode, newId } from "../scene/model";
+import { type Layer, type LayerMode, type SweepMode, newId } from "../scene/model";
+import { overscanLength, startSpeedOf, suggestCornerPower } from "../machine/motion";
+import { uneven } from "../job/depth";
 import { DEFAULT_FILL, type FillPattern, type FillSettings } from "../job/fill";
 import { ModeCut, ModeFill, ModeFillCut, PatternCross, PatternDots, PatternLines, PatternOffset } from "../ui/customIcons";
 import { commit, doc, notify, prefs, profile } from "../scene/store";
-import { jobEstimate, preview, toolpath, togglePreview } from "./job";
+import { jobDepth, jobEstimate, preview, toolpath, togglePreview } from "./job";
 import { selectedLayer } from "./layerSelect";
 import { NumberInput } from "../ui/NumberInput";
 import { PowerRow } from "./PowerRow";
@@ -31,7 +33,7 @@ function Field(props: { icon: LucideIcon; label: string; unit: string; value: nu
 /** Which preset a layer uses: pick one to fill in its settings; edited values are flagged and can be reverted. */
 function MaterialRow(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "color">>) => void }) {
   const l = props.layer;
-  const machine = profile.value.name;
+  const machine = profile.value;
   const list = presetsFor(machine);
   const preset = list.find((p) => p.id === l.material);
   const edited = !!preset && !matchesPreset(l, preset);
@@ -43,7 +45,7 @@ function MaterialRow(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "co
   }, [isNaming]);
   const settings = { speed: l.speed, minPower: l.minPower, maxPower: l.maxPower, passes: l.passes };
   const saveNew = () => {
-    const p = { id: newId(), name: (naming ?? "").trim(), machine, ...settings };
+    const p = { id: newId(), name: (naming ?? "").trim(), machine: machine.name, machineId: machine.id, ...settings, ...(l.mode === "fill" ? { op: "engrave" as const } : {}), ...((l.kerf ?? 0) > 0 ? { kerf: l.kerf } : {}) };
     if (!validPreset(p)) return notify(t("Give the preset a name (settings must be valid)."), "error");
     if (!savePresets([...presets.value, p])) return notify(presetsError.value ?? t("Could not save the preset."), "error");
     props.set({ material: p.id });
@@ -210,10 +212,68 @@ function LayerRow(props: { layer: Layer; index: number; count: number; seconds: 
   );
 }
 
+const SWEEPS: { mode: SweepMode; label: string; title: string }[] = [
+  { mode: "quick", label: msg("Quickest"), title: msg("Areas that share rows are swept together when that's quicker. Can make some areas burn deeper than others.") },
+  { mode: "together", label: msg("Together"), title: msg("Areas that share rows are swept together, row by row across the gaps: they burn alike, and share overscan.") },
+  { mode: "separate", label: msg("Separately"), title: msg("Each area is swept on its own.") },
+];
+
+/** Fill layers: overscan and how areas are swept; advanced: overscan length and scan offset. */
+function FillMotionRows(props: { layer: Layer; set: (patch: Partial<Omit<Layer, "color">>) => void }) {
+  const l = props.layer;
+  const p = profile.value;
+  const adv = prefs.value.advanced;
+  const ov = l.overscan ?? "off";
+  const auto = overscanLength("auto", l.speed, p);
+  const depth = (() => {
+    const i = toolpath.value.layers.findIndex((x) => x.color === l.color);
+    return i < 0 ? undefined : jobDepth.value.find((d) => d.layer === i);
+  })();
+  return (
+    <>
+      <div class="ws-row ws-overscan">
+        <span title={t("Laser off while the head speeds up and slows down at each row end, so edges burn as deep as the middle. Costs time.")}>{t("Overscan")}</span>
+        <div class="ws-segmented" role="group" aria-label={t("Overscan")}>
+          <button type="button" class={ov === "off" ? "on" : ""} aria-pressed={ov === "off"} onClick={() => props.set({ overscan: "off" })}>{t("Off")}</button>
+          <button type="button" class={ov === "auto" ? "on" : ""} aria-pressed={ov === "auto"} title={t("{mm} mm at this speed, from the machine's acceleration", { mm: auto })} onClick={() => props.set({ overscan: "auto" })}>
+            {t("Auto")}
+          </button>
+          {adv && (
+            <NumberInput class="ws-pct" value={typeof ov === "number" ? ov : null} label={t("Overscan length (mm)")} step={0.5} min={0} max={100} onCommit={(v) => props.set({ overscan: v })} />
+          )}
+        </div>
+        {adv && <em>mm</em>}
+      </div>
+      <div class="ws-row">
+        <span>{t("Sweep")}</span>
+        <select aria-label={t("Sweep")} value={l.sweep ?? "quick"} title={t(SWEEPS.find((s) => s.mode === (l.sweep ?? "quick"))!.title)} onChange={(e) => props.set({ sweep: e.currentTarget.value as SweepMode })}>
+          {SWEEPS.map((s) => (
+            <option key={s.mode} value={s.mode} title={t(s.title)}>
+              {t(s.label)}
+            </option>
+          ))}
+        </select>
+        {adv && (
+          <label class="ws-lf" title={t("Scan offset for this layer instead of the machine profile's (mm)")}>
+            <span>{t("scan")}</span>
+            <NumberInput value={l.scanOffset ?? null} label={t("Scan offset (mm)")} step={0.05} min={-2} max={2} onCommit={(v) => props.set({ scanOffset: v })} />
+            <em>mm</em>
+          </label>
+        )}
+      </div>
+      {depth && uneven(depth) && (
+        <p class="ws-hint">{t("Predicted: {pct} % of this engraving burns deeper than the middle of long rows (edges up to {x}× the energy).", { pct: Math.round(depth.deepShare * 100), x: Math.round(depth.peak * 10) / 10 })}</p>
+      )}
+    </>
+  );
+}
+
 /** All settings of the selected layer. */
 function LayerEditor(props: { layer: Layer; index: number }) {
   const l = props.layer;
   const set = (patch: Partial<Omit<Layer, "color">>) => commit(updateLayer(doc.value, l.color, patch));
+  const p = profile.value;
+  const mode = l.mode ?? "cut";
   return (
     <div class="ws-layer ws-layer-editor">
       <div class="ws-layer-head">
@@ -227,7 +287,17 @@ function LayerEditor(props: { layer: Layer; index: number }) {
         <Field icon={Gauge} label={t("Speed")} unit="mm/s" value={l.speed} step={1} min={0.1} onCommit={(speed) => set({ speed })} />
         <Field icon={Repeat} label={t("Passes")} unit="×" value={l.passes} step={1} min={1} max={99} onCommit={(passes) => set({ passes })} />
       </div>
-      <PowerRow min={l.minPower} max={l.maxPower} speed={l.speed} linked={powerLinked(l)} onChange={set} />
+      <PowerRow min={l.minPower} max={l.maxPower} speed={l.speed} linked={powerLinked(l)} onChange={set} startSpeed={startSpeedOf(p)} suggest={mode !== "cut" ? suggestCornerPower(l.maxPower, l.speed, p) : undefined} />
+      {mode !== "cut" && <FillMotionRows layer={l} set={set} />}
+      {mode === "cut" && (prefs.value.advanced || (l.kerf ?? 0) > 0) && (
+        <div class="ws-layer-fields">
+          <label class="ws-lf" title={t("Kerf compensation: outlines grow and holes shrink by half of this, so parts come out at their drawn size")}>
+            <span>{t("kerf")}</span>
+            <NumberInput value={l.kerf ?? 0} label={t("Kerf (mm)")} step={0.01} min={0} max={2} onCommit={(kerf) => set({ kerf })} />
+            <em>mm</em>
+          </label>
+        </div>
+      )}
     </div>
   );
 }

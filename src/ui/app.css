@@ -425,3 +425,40 @@ body > #workspace { height: 100%; border: 0; }
 .ws-primary-btn { background: var(--ws-select); border-color: var(--ws-select); color: #fff; }
 .ws-primary-btn:disabled { opacity: .5; }
 @media (max-width: 760px) { .ws-import-raster { grid-template-columns: 1fr; } }
+
+/* Tuning, machine questions, checks before a job */
+.ws-link-btn { border: 0; background: none; padding: .15rem 0; color: var(--ws-select); font: inherit; font-size: .82rem; cursor: pointer; text-align: left; }
+.ws-link-btn:hover { text-decoration: underline; }
+.ws-segmented > button { border-radius: 0; margin-left: -1px; }
+.ws-segmented > button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.ws-segmented > button:last-child { border-radius: 0 6px 6px 0; }
+.ws-segmented > button.on { background: var(--ws-select); border-color: var(--ws-select); color: #fff; position: relative; z-index: 1; }
+.ws-segmented .ws-pct { width: 3.5rem; margin-left: .3rem; }
+.ws-overscan { gap: .4rem; }
+.ws-suggest { display: flex; gap: .4rem; align-items: baseline; flex-wrap: wrap; margin: .2rem 0 .3rem; }
+.ws-suggest small { color: var(--ws-text); }
+.ws-wrap { flex-wrap: wrap; gap: .35rem; }
+.ws-checks .ws-check-card { border: 1px solid var(--ui-border); border-radius: 6px; padding: .45rem .55rem; margin: .4rem 0; }
+.ws-checks .ws-check-card p { margin: 0 0 .35rem; font-size: .85rem; }
+.ws-checks button small { color: var(--ws-text); }
+.ws-preset-group { list-style: none; }
+.ws-preset-group h4 { margin: .5rem 0 .2rem; font-size: .85rem; }
+.ws-tune-list { list-style: none; padding: 0; margin: .3rem 0; }
+.ws-tune-list li { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
+.ws-tune-list small { color: var(--ws-text); }
+.ws-tuning { width: min(720px, 94vw); }
+.ws-tuning h4 { margin: .8rem 0 .3rem; }
+.ws-tuning p { font-size: .88rem; }
+.ws-tune-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: .3rem; margin: .4rem 0 .6rem; }
+.ws-tune-steps button { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; text-align: left; padding: .35rem .5rem; }
+.ws-tune-steps button small { opacity: .8; font-size: .72rem; }
+.ws-tune-steps button.on { background: var(--ws-select); border-color: var(--ws-select); color: #fff; }
+.ws-tune-make { display: flex; flex-direction: column; gap: .4rem; align-items: flex-start; }
+.ws-card { width: 100%; max-height: 46vh; background: #f6f3ee; border: 1px solid var(--ui-border); border-radius: 6px; margin: .3rem 0; }
+.ws-card-patch { cursor: pointer; }
+.ws-card-patch rect { fill: transparent; stroke: transparent; stroke-width: .35; }
+.ws-card-patch:hover rect { stroke: var(--ws-select); stroke-dasharray: .8 .5; }
+.ws-card-patch.on rect { stroke: var(--ws-select); fill: rgba(37, 99, 235, .12); }
+.ws-card-patch text { fill: #555; font-family: system-ui, sans-serif; pointer-events: none; }
+.ws-machine-dialog { width: min(460px, 94vw); }
+@media (max-width: 760px) { .ws-tune-steps { grid-template-columns: repeat(2, 1fr); } }

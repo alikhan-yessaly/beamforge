@@ -27,6 +27,8 @@ import { ImportDialog } from "./ImportDialog";
 import { ExportDialog } from "./ExportDialog";
 import { DevicePanel, ModeSwitch, PrepareBar } from "./DevicePanel";
 import { appMode } from "./mode";
+import { TuningDialog } from "./TuningDialog";
+import { MachineDialog } from "./MachineDialog";
 
 type Tab = "layers" | "materials" | "machine" | "job";
 const TABS: { name: Tab; icon: typeof Layers; label: string; device: boolean }[] = [
@@ -110,6 +112,8 @@ function App() {
       <ImportDialog />
       <ExportDialog />
       <ShortcutSheet />
+      <TuningDialog />
+      <MachineDialog />
     </div>
   );
 }

@@ -7,7 +7,9 @@ import { outsideBed } from "../scene/ops";
 import { type Doc } from "../scene/model";
 import { doc, notify, prefs, profile, resetDoc } from "../scene/store";
 import { type OpenedFile, type RecentFile, canSaveInPlace, loadCurrentHandle, loadRecent, storeCurrentHandle, pickProjectFile, readHandle, rememberRecent, saveAsFile, writeHandle } from "./files";
-import { type ProjectJob, parseProject, projectName, serializeProject } from "./format";
+import { type ProjectJob, compareMaterials, parseProject, projectName, serializeProject } from "./format";
+import { presetSettings, presets, savePresets } from "../workspace/materials";
+import { updateLayer } from "../job/layers";
 
 const KEY = "ruida-web.project.v1";
 
@@ -91,10 +93,28 @@ function load(f: OpenedFile): void {
   prefs.value = { ...prefs.value, startFrom: p.job.startFrom, innerFirst: p.job.innerFirst, jobOrder: p.job.order ?? "auto" };
   project.value = { name: projectName(f.name), handle: f.handle, saved: { doc: doc.value, job: jobNow() } };
   if (f.handle) void rememberRecent(f.name, f.handle).then((r) => (recentFiles.value = r));
+  reconcileMaterials(p.materials ?? []);
   const notes: string[] = [];
   if (p.machine.profileName && p.machine.profileName !== profile.value.name) notes.push(t("it was set up for \"{machine}\"", { machine: p.machine.profileName }));
   if (outsideBed(p.doc, profile.value)) notes.push(t("part of the drawing is outside this machine's bed"));
   notify(notes.length ? t("Opened {name}: {notes}.", { name: projectName(f.name), notes: notes.join("; ") }) : t("Opened {name}.", { name: projectName(f.name) }), notes.length ? "warn" : "info");
+}
+
+/**
+ * The file's materials against this browser's library. Different settings: ask whether the layers switch to the
+ * local library or keep the file's. Missing: offer to add them to the active machine's library.
+ */
+function reconcileMaterials(file: Parameters<typeof compareMaterials>[0]): void {
+  const { missing, differ } = compareMaterials(file, presets.value);
+  if (differ.length && window.confirm(t("This file's settings for {list} differ from this machine's material library. OK: use this machine's library. Cancel: keep the file's settings.", { list: differ.map((d) => d.local.name).join(", ") }))) {
+    let d = doc.value;
+    for (const { local } of differ) for (const l of d.layers ?? []) if (l.material === local.id) d = updateLayer(d, l.color, presetSettings(local));
+    if (d !== doc.value) resetDoc(d);
+  }
+  if (missing.length && window.confirm(t("Add {n} material presets from this file to the library of \"{machine}\"?", { n: missing.length, machine: profile.value.name }))) {
+    const p = profile.value;
+    savePresets([...presets.value, ...missing.map((m) => ({ ...m, machine: p.name, machineId: p.id }))]);
+  }
 }
 
 export async function openProject(): Promise<void> {
@@ -118,7 +138,7 @@ export async function openRecent(r: RecentFile): Promise<void> {
 
 function text(): string {
   const model = link.cardId !== null ? `card 0x${link.cardId.toString(16)}` : null;
-  return serializeProject(doc.value, jobNow(), { driver: "ruida", model, profileName: profile.value.name });
+  return serializeProject(doc.value, jobNow(), { driver: "ruida", model, profileName: profile.value.name }, new Date(), presets.value);
 }
 
 /** Save to the project's file. Without a file (never saved, or a browser that can't write files) this is Save As. */

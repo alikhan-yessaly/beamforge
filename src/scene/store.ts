@@ -1,11 +1,13 @@
+import { t } from "../i18n";
 import type { JobOrder } from "../job/plan";
 import { computed, effect, signal } from "@preact/signals";
 import { selectionBox } from "./ops";
-import { type Anchor, DEFAULT_PROFILE, type Doc, type MachineProfile } from "./model";
+import { type Anchor, DEFAULT_PROFILE, type Doc, type MachineProfile, newId } from "./model";
 import { migrateDoc, visibleDocument } from "../job/layers";
 
 const DOC_KEY = "ruida-web.doc.v1";
 const PROFILE_KEY = "ruida-web.profile.v1";
+const MACHINES_KEY = "ruida-web.machines.v1";
 const PREFS_KEY = "ruida-web.prefs.v1";
 const HISTORY_LIMIT = 200;
 
@@ -36,11 +38,100 @@ export interface Prefs {
   startFrom: "absolute" | "current";
   /** Job order: layer by layer, object by object, or whichever is quicker by the time estimate. */
   jobOrder: JobOrder;
+  /** Advanced mode: every raw machine and tuning value is shown and editable, plus tuning files. */
+  advanced: boolean;
 }
 
 export const doc = signal<Doc>(migrateDoc(load<Doc>(DOC_KEY, { objects: [], layers: [] })));
-export const profile = signal<MachineProfile>(load(PROFILE_KEY, DEFAULT_PROFILE));
-export const prefs = signal<Prefs>(load(PREFS_KEY, { snapToGrid: false, gridStep: 10, anchor: { fx: 0, fy: 0 }, lockAspect: true, innerFirst: true, startFrom: "absolute", jobOrder: "auto" }));
+// ---------- Machine profiles ----------
+// Every machine the browser knows, by id; `profile` is the active one (what planning, jogging and the estimate
+// use). Older browsers had a single profile under PROFILE_KEY: it becomes the first entry of the list.
+
+function loadMachines(): { active: string; list: MachineProfile[] } {
+  try {
+    const raw = localStorage.getItem(MACHINES_KEY);
+    if (raw) {
+      const v = JSON.parse(raw) as { active?: unknown; list?: unknown };
+      const list = Array.isArray(v.list) ? (v.list as MachineProfile[]).filter((p) => p && typeof p.id === "string" && typeof p.name === "string").map((p) => ({ ...DEFAULT_PROFILE, ...p })) : [];
+      if (list.length) return { active: list.some((p) => p.id === v.active) ? (v.active as string) : list[0]!.id!, list };
+    }
+  } catch {
+    /* fall through to the single profile */
+  }
+  const one = { ...load(PROFILE_KEY, DEFAULT_PROFILE) };
+  one.id ??= newId();
+  return { active: one.id, list: [one] };
+}
+const initialMachines = loadMachines();
+
+/** All machine profiles. */
+export const machines = signal<MachineProfile[]>(initialMachines.list);
+/** The active machine profile. Writing it updates its entry in `machines`. */
+export const profile = signal<MachineProfile>(initialMachines.list.find((p) => p.id === initialMachines.active)!);
+
+/** Make another profile active. */
+export function selectMachine(id: string): void {
+  const p = machines.value.find((m) => m.id === id);
+  if (p && p.id !== profile.value.id) profile.value = p;
+}
+
+/** Add a profile (made active when `activate`). */
+export function addMachine(p: MachineProfile, activate = true): MachineProfile {
+  const m = { ...p, id: p.id && !machines.value.some((x) => x.id === p.id) ? p.id : newId() };
+  machines.value = [...machines.value, m];
+  if (activate) profile.value = m;
+  return m;
+}
+
+/** Replace a stored profile by id (the active one through `profile`). */
+export function updateMachine(p: MachineProfile): void {
+  if (p.id === profile.value.id) profile.value = p;
+  else machines.value = machines.value.map((m) => (m.id === p.id ? p : m));
+}
+
+/** Delete a profile; the last one can't be deleted. */
+export function removeMachine(id: string): void {
+  if (machines.value.length <= 1) return;
+  machines.value = machines.value.filter((m) => m.id !== id);
+  if (profile.value.id === id) profile.value = machines.value[0]!;
+}
+
+/**
+ * A question the app needs answered about which machine is connected: pick among several matching profiles, the
+ * connected controller doesn't match the active profile, or the machine class of a profile that has none.
+ */
+export type MachinePrompt =
+  | { kind: "choose"; ids: string[]; resolve: (id: string | null) => void }
+  | { kind: "mismatch"; resolve: (choice: "keep" | "new" | null) => void }
+  | { kind: "class"; id: string; resolve: () => void };
+export const machinePrompt = signal<MachinePrompt | null>(null);
+
+const sameBed = (c: NonNullable<MachineProfile["controller"]>, w: number, h: number) => Math.abs(c.bedW - w) < 1 && Math.abs(c.bedH - h) < 1;
+
+/**
+ * The controller reported its card ID and bed: pick the profile it belongs to (asking when that's unclear), record
+ * the controller on it, and ask for the machine class if the profile has none. Resolves when settled.
+ */
+export async function identifyController(cardId: number, bedW: number, bedH: number): Promise<void> {
+  const controller = { cardId, bedW, bedH };
+  const matches = machines.value.filter((m) => m.controller && m.controller.cardId === cardId && sameBed(m.controller, bedW, bedH));
+  const active = profile.value;
+  if (!matches.some((m) => m.id === active.id)) {
+    if (matches.length === 1) {
+      profile.value = matches[0]!;
+      notify(t("Switched to the machine profile \"{name}\": it matches the connected controller.", { name: matches[0]!.name }));
+    } else if (matches.length > 1) {
+      const id = await new Promise<string | null>((resolve) => (machinePrompt.value = { kind: "choose", ids: matches.map((m) => m.id!), resolve }));
+      if (id) selectMachine(id);
+    } else if (active.controller) {
+      const choice = await new Promise<"keep" | "new" | null>((resolve) => (machinePrompt.value = { kind: "mismatch", resolve }));
+      if (choice === "new") addMachine({ ...DEFAULT_PROFILE, name: `${DEFAULT_PROFILE.name} ${machines.value.length + 1}` });
+    }
+  }
+  profile.value = { ...profile.value, controller, bedW, bedH };
+  if (!profile.value.class) await new Promise<void>((resolve) => (machinePrompt.value = { kind: "class", id: profile.value.id!, resolve }));
+}
+export const prefs = signal<Prefs>(load(PREFS_KEY, { snapToGrid: false, gridStep: 10, anchor: { fx: 0, fy: 0 }, lockAspect: true, innerFirst: true, startFrom: "absolute", jobOrder: "auto", advanced: false }));
 export const selection = signal<ReadonlySet<string>>(new Set());
 export const messages = signal<{ id: number; text: string; kind: "info" | "warn" | "error" }[]>([]);
 /** Cursor position in internal bed mm, or null when the pointer is outside the canvas. */
@@ -104,6 +195,12 @@ effect(() => {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => save(DOC_KEY, d), 500);
 });
+effect(() => {
+  const p = profile.value;
+  const list = machines.peek();
+  machines.value = list.some((m) => m.id === p.id) ? list.map((m) => (m.id === p.id ? p : m)) : [...list, p];
+});
+effect(() => save(MACHINES_KEY, { active: profile.value.id, list: machines.value }));
 effect(() => save(PROFILE_KEY, profile.value));
 effect(() => save(PREFS_KEY, prefs.value));
 

@@ -9,7 +9,7 @@ import { SwitchableTransport } from "../transport/switchable";
 import { TrafficLog } from "../transport/trafficLog";
 import { WebSerialTransport } from "../transport/webSerial";
 import { WebSocketTransport } from "../transport/webSocket";
-import { profile } from "../scene/store";
+import { identifyController, profile } from "../scene/store";
 import { readBedDimensions } from "./machineSettings";
 
 export type ConnKind = "usb" | "sim" | "bridge";
@@ -50,6 +50,9 @@ export async function refreshBedDimensions(): Promise<void> {
     const bed = await readBedDimensions(link, () => request === bedRequest);
     if (request !== bedRequest || !link.verified) return;
     motion.bed = { x: Math.round(bed.width * 1000), y: Math.round(bed.height * 1000) };
+    // Pick (or confirm) the machine profile for this controller, then take its bed size.
+    if (link.cardId !== null) await identifyController(link.cardId, bed.width, bed.height);
+    if (request !== bedRequest || !link.verified) return;
     profile.value = { ...profile.value, bedW: bed.width, bedH: bed.height };
     bedLoad.value = { state: "ready", message: t("Machine bed: {w} × {h} mm", { w: bed.width, h: bed.height }) };
   } catch (e) {

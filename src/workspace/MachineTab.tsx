@@ -1,8 +1,12 @@
 // Machine tab: simple mode (head position, jog, Go to, machine profile) or developer mode (adds connection
 // details, raw status, raw bytes and the traffic log). The jog/diagnostics DOM comes from
 // src/ui/machinePanel.ts and index.html; elements marked .dev-only are hidden in simple mode.
-import { t } from "../i18n";
-import { Wrench } from "lucide-preact";
+import { t, tp } from "../i18n";
+import { SlidersHorizontal, Wrench } from "lucide-preact";
+import { profile } from "../scene/store";
+import { classById } from "../machine/classes";
+import { openTuning } from "./TuningDialog";
+import { presetsFor } from "./materials";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { headPos, linkState, watchHeadPosition } from "../app/connection";
 import { IconButton } from "../ui/icons";
@@ -44,6 +48,49 @@ function HeadPosition(props: { active: boolean }) {
   );
 }
 
+/** Tuning progress for the active machine and the way into the wizard. */
+function TuningSection() {
+  const p = profile.value;
+  const tn = p.tuning ?? {};
+  const mats = presetsFor(p);
+  const rows: [string, string | null, Parameters<typeof openTuning>[0]][] = [
+    [t("Fill evenness"), tn.fill ?? null, "fill"],
+    [t("Scan offset"), tn.scanOffset ?? null, "scan"],
+    [t("Power and speed"), mats.some((m) => m.material) ? tp(["{n} material", "{n} materials"], new Set(mats.map((m) => m.material).filter(Boolean)).size) : null, "grid"],
+    [t("Kerf"), mats.some((m) => m.kerf !== undefined) ? t("done for some materials") : null, "kerf"],
+  ];
+  const cls = classById(p.class);
+  return (
+    <section class="ws-panel">
+      <h3>{t("Tuning")}</h3>
+      <p class="ws-hint">
+        {cls ? t("Untuned values come from the class “{class}”.", { class: t(cls.name) }) : t("Untuned values are generic defaults.")}{" "}
+        {t("Each test card takes about 5 minutes on scrap; all are optional.")}
+      </p>
+      <ul class="ws-tune-list">
+        {rows.map(([name, done, step]) => (
+          <li key={step}>
+            <button type="button" class="ws-link-btn" onClick={() => openTuning(step)}>
+              {name}
+            </button>
+            <small>{done ? `✓ ${done}` : t("not done")}</small>
+          </li>
+        ))}
+      </ul>
+      <div class="ws-row">
+        <button type="button" onClick={() => openTuning(tn.fill ? (tn.scanOffset ? "grid" : "scan") : "fill")}>
+          <SlidersHorizontal size={14} strokeWidth={1.75} aria-hidden="true" /> {t("Tune this machine…")}
+        </button>
+        {(tn.dismissed?.length ?? 0) > 0 && (
+          <button type="button" class="ws-link-btn" onClick={() => (profile.value = { ...p, tuning: { ...tn, dismissed: [] } })}>
+            {t("Show hidden suggestions again")}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function MachineTab(props: { visible: boolean; content: HTMLElement | null }) {
   const [advanced, setAdvanced] = useState(loadAdvanced);
   const host = useRef<HTMLDivElement>(null);
@@ -73,6 +120,7 @@ export function MachineTab(props: { visible: boolean; content: HTMLElement | nul
       <HeadPosition active={props.visible} />
       <div ref={host} />
       <ProfileSection advanced={advanced} />
+      <TuningSection />
     </div>
   );
 }

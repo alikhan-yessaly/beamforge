@@ -37,6 +37,8 @@ export interface SceneObject {
    * engraving (Ruida scan mode) isn't supported yet, so it serves as a reference for tracing and placement.
    */
   image?: SceneImage;
+  /** A tuning test card (src/tuning/cards.ts): its parameters, so the results view can redraw it. */
+  card?: import("../tuning/cards").CardParams;
 }
 
 export interface SceneImage {
@@ -72,7 +74,21 @@ export interface Layer {
   mode?: LayerMode;
   /** Fill pattern settings (fill modes); missing = DEFAULT_FILL. */
   fill?: FillSettings;
+  /**
+   * Fill layers: laser-off run-up before and after each engraved row, so the laser fires only at full speed and
+   * edges burn as deep as the middle. "auto" = the profile's speed-up distance; a number = mm. Missing = off.
+   */
+  overscan?: Overscan;
+  /** Fill layers: areas that share rows are swept together, each on its own, or whichever is quicker (default). */
+  sweep?: SweepMode;
+  /** Cut layers: kerf compensation width in mm (closed outlines grow by half of it, holes shrink). Missing = 0. */
+  kerf?: number;
+  /** Fill layers, advanced: scan offset in mm used instead of the machine profile's (bidirectional row lag). */
+  scanOffset?: number;
 }
+
+export type Overscan = "off" | "auto" | number;
+export type SweepMode = "quick" | "together" | "separate";
 
 export type LayerMode = "cut" | "fill" | "fillCut";
 
@@ -99,7 +115,43 @@ export interface MachineProfile {
   accel: number;
   /** Speed for Frame, mm/s (default 30). */
   frameSpeed?: number;
+  /** Stable id (profiles are matched by it; the name can change). Missing on profiles saved before machine lists. */
+  id?: string;
+  /** Machine class the defaults came from (src/machine/classes.ts); missing = not chosen yet. */
+  class?: string;
+  /**
+   * Controller start speed, mm/s: the head starts and stops at this speed, and corner power applies at or below it.
+   * Missing = ASSUMED_START_SPEED.
+   */
+  startSpeed?: number;
+  /** Lowest power (%) at which the tube fires reliably; suggested corner powers never go below it. Missing = 10. */
+  minFirePower?: number;
+  /**
+   * Scan offset per speed (mm): how far a row engraved right-to-left lands from one engraved left-to-right. Fill
+   * burns are shifted back by half of it along their direction. Interpolated by speed; empty or missing = none.
+   */
+  scanOffsets?: { speed: number; offset: number }[];
+  /** What the controller reported when this profile was last used, so connecting picks this profile again. */
+  controller?: { cardId: number; bedW: number; bedH: number };
+  /** Tuning results and progress (src/tuning/). */
+  tuning?: MachineTuning;
 }
+
+export interface MachineTuning {
+  /** ISO date of the last fill-evenness test, when acceleration and start speed were measured. */
+  fill?: string;
+  /** Which fix evened out the fill test best: overscan, a lower corner power, or none needed. */
+  fillFix?: "overscan" | "corner" | "none";
+  /** ISO date of the last scan-offset test. */
+  scanOffset?: string;
+  /** Suggestions the owner chose not to see again for this machine (ids from src/job/checks.ts). */
+  dismissed?: string[];
+}
+
+/** Typical Ruida start speed, used when the profile has none. */
+export const ASSUMED_START_SPEED = 10;
+/** Typical lowest reliable power of a CO2 tube, %. */
+export const ASSUMED_MIN_FIRE_POWER = 10;
 
 export const DEFAULT_PROFILE: MachineProfile = {
   name: "Ruida laser",

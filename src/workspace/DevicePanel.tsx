@@ -13,7 +13,11 @@ import { FILE_NAME_MAX, normalizeFileName } from "../protocol/encode";
 import { project } from "../project/state";
 import { commit, doc, notify, prefs } from "../scene/store";
 import { IconButton } from "../ui/icons";
-import { jobEstimate, preview, togglePreview, toolpath } from "./job";
+import { jobChecks, jobEstimate, preview, togglePreview, toolpath } from "./job";
+import type { Check, Fix, FixKind } from "../job/checks";
+import { updateLayer } from "../job/layers";
+import { profile } from "../scene/store";
+import { openTuning } from "./TuningDialog";
 import { appMode, enterDevice, enterPrepare, machineBusy, prepareProblem, savingToMachine } from "./mode";
 import { buildJobCommands, StartFromControl } from "./RunPanel";
 import { session as sketchSession } from "./sketch/state";
@@ -158,6 +162,70 @@ function JobSummary() {
   );
 }
 
+/** Checks hidden for this session (ids). */
+const hiddenChecks = signal<ReadonlySet<string>>(new Set());
+
+const FIX_LABEL: Record<FixKind, string> = {
+  overscan: msg("Overscan"),
+  overscanTogether: msg("Overscan, areas swept together"),
+  corner: msg("Corner power {p} %"),
+  together: msg("Sweep all together"),
+  separate: msg("Sweep each on its own"),
+};
+
+const signed = (s: number) => (Math.abs(s) < 0.5 ? t("no extra time") : `${s > 0 ? "+" : "−"}${formatDuration(Math.abs(s))}`);
+
+function FixButton(props: { color: string; fix: Fix; disabled: boolean }) {
+  const f = props.fix;
+  const after = f.after ? t("then {pct} % deeper", { pct: Math.round(f.after.deepShare * 100) }) : "";
+  return (
+    <button type="button" disabled={props.disabled} onClick={() => commit(updateLayer(doc.value, props.color, f.patch))} title={after}>
+      {t(FIX_LABEL[f.kind], { p: f.patch.minPower ?? "" })} <small>({signed(f.seconds)}{after ? `; ${after}` : ""})</small>
+    </button>
+  );
+}
+
+/** Uneven engraving predicted for this job, with the fixes; nothing changes without a click. */
+function JobChecks() {
+  const checks = jobChecks.value.filter((c) => !hiddenChecks.value.has(c.id));
+  const busy = machineBusy();
+  if (!checks.length) return null;
+  const layerNo = (color?: string) => String(toolpath.value.layers.findIndex((l) => l.color === color) + 1).padStart(2, "0");
+  const hide = (c: Check) => (hiddenChecks.value = new Set([...hiddenChecks.value, c.id]));
+  return (
+    <section class="ws-panel ws-checks">
+      <h3>{t("Before you start")}</h3>
+      {checks.map((c) => (
+        <div key={c.id} class="ws-check-card">
+          <p>
+            {c.color && <i class="ws-swatch" style={{ background: c.color }} />}{" "}
+            {c.kind === "uneven" &&
+              t("Layer {n}: about {pct} % of the engraving will burn deeper than the middle of long rows (row ends, small letters).", { n: layerNo(c.color), pct: Math.round((c.depth?.deepShare ?? 0) * 100) })}
+            {c.kind === "mixed" && t("Layer {n}: some areas are swept together and others alone, so they will burn to different depths.", { n: layerNo(c.color) })}
+            {c.kind === "tune" && t("These predictions use typical values for this kind of machine. A 5-minute test card on scrap makes them your machine's own.")}
+          </p>
+          <div class="ws-row ws-wrap">
+            {c.fixes.map((f) => (
+              <FixButton key={f.kind} color={c.color!} fix={f} disabled={busy} />
+            ))}
+            {c.kind === "tune" ? (
+              <>
+                <button type="button" onClick={() => openTuning("fill")}>{t("Tune…")}</button>
+                <button type="button" class="ws-link-btn" onClick={() => {
+                  const p = profile.value;
+                  profile.value = { ...p, tuning: { ...p.tuning, dismissed: [...(p.tuning?.dismissed ?? []), "tune"] } };
+                }}>{t("Don't ask again for this machine")}</button>
+              </>
+            ) : (
+              <button type="button" class="ws-link-btn" onClick={() => hide(c)}>{t("Keep as is")}</button>
+            )}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 const machineFiles = signal<{ names: string[]; error?: string } | null>(null);
 const saveProgress = signal<string | null>(null);
 
@@ -266,6 +334,7 @@ export function DevicePanel() {
   return (
     <div class="ws-device">
       <JobSummary />
+      <JobChecks />
       <SaveToMachine />
     </div>
   );

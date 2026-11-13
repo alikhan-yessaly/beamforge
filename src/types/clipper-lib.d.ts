@@ -29,7 +29,7 @@ declare module "clipper-lib" {
     PolyType: { ptSubject: number; ptClip: number };
     ClipType: { ctUnion: number };
     PolyFillType: { pftEvenOdd: number; pftNonZero: number };
-    JoinType: { jtRound: number };
+    JoinType: { jtRound: number; jtMiter: number };
     EndType: { etClosedPolygon: number };
   };
   export type PolyNodeType = PolyNode;

@@ -13,7 +13,9 @@
 // fill sweeps, are ordered the same way; the last piece heads towards the next part, or home.
 import { t } from "../i18n";
 import { type Box, type Vec, apply, pathsBox, pointInPolygon } from "../geom/geom";
-import { DEFAULT_PROFILE, type Doc, type Layer } from "../scene/model";
+import { DEFAULT_PROFILE, type Doc, type Layer, type SweepMode } from "../scene/model";
+import { type MotionProfile, overscanLength, scanOffsetAt } from "../machine/motion";
+import { kerfRings } from "./kerf";
 import { estimate } from "./estimate";
 import { DEFAULT_FILL, type FillSettings, MAX_FILL_PATHS, fillIslands, fillPaths, tooDenseMessage } from "./fill";
 import { regionRings } from "./regions";
@@ -29,6 +31,11 @@ export interface Segment {
   cut: boolean;
   /** index into Toolpath.layers, or -1 for travel */
   layer: number;
+  /**
+   * Laser-off move inside an engraved row, run at the layer's speed in line with the burns: overscan before and
+   * after a row, and the gaps between areas swept together. `layer` is the fill's layer. The machine gets plain moves.
+   */
+  lead?: boolean;
 }
 
 /** How the work is ordered: "auto" picks whichever of the two has less travel. */
@@ -46,6 +53,8 @@ export interface Toolpath {
   errors: string[];
   /** Things worth knowing that don't block the job (e.g. open paths in a fill layer are not filled). */
   warnings: string[];
+  /** Fill layers (index into `layers`): how many separate areas each sweep covers, e.g. [3, 1, 1]. */
+  sweeps?: number[][];
 }
 
 export interface PlanOptions {
@@ -53,8 +62,13 @@ export interface PlanOptions {
   innerFirst: boolean;
   /** Default "auto". */
   order?: JobOrder;
-  /** Travel speed and acceleration: the order is chosen by time (default: the default machine profile). */
-  motion?: { travelSpeed: number; accel: number };
+  /**
+   * Travel speed and acceleration (the order is chosen by time), start speed (auto overscan) and scan offsets
+   * (default: the default machine profile).
+   */
+  motion?: MotionProfile;
+  /** Where laser-off overscan moves may go (internal bed mm); missing = anywhere. */
+  bounds?: Box;
   /** Search settings for the order (benchmarks and tests). */
   tuning?: OrderTuning;
 }
@@ -89,10 +103,20 @@ interface Work {
 interface Unit {
   li: number;
   paths: Vec[][];
+  /** Fill sweeps: rows of burns, run with overscan and the scan-offset shift. */
+  fill?: boolean;
+}
+
+/** Per-layer motion details for engraving rows. */
+interface RowMotion {
+  /** Overscan length, mm. */
+  lead: number;
+  /** Shift each burn back along its direction by this much (half the scan offset), mm. */
+  shift: number;
 }
 
 export function planToolpath(doc: Doc, opts: PlanOptions): Toolpath {
-  const out: Toolpath = { layers: [], segments: [], start: opts.start, order: "layer", errors: [], warnings: [] };
+  const out: Toolpath = { layers: [], segments: [], start: opts.start, order: "layer", errors: [], warnings: [], sweeps: [] };
   const work: Work[] = [];
 
   for (const layer of activeLayers(doc).filter((l) => l.output)) {
@@ -115,11 +139,13 @@ export function planToolpath(doc: Doc, opts: PlanOptions): Toolpath {
     const name = t("Layer {color}", { color: layer.color });
     const li = out.layers.length;
     const mine: Work[] = [];
+    if (mode !== "fill" && (layer.kerf ?? 0) > 0) items = withKerf(items, layer.kerf!);
     if (mode === "cut" && regions.length) out.warnings.push(t("{layer} is a cut layer: its filled regions are skipped. Set the layer to Fill.", { layer: name }));
     if (mode !== "cut") {
       const groups = mode === "fill" || mode === "fillCut" ? [legacy, ...regions] : regions;
-      const f = fillCandidates(groups, { ...DEFAULT_FILL, ...layer.fill });
+      const f = fillCandidates(groups, { ...DEFAULT_FILL, ...layer.fill }, layer.sweep);
       if (f.error) out.errors.push(`${name}: ${f.error}`);
+      out.sweeps![li] = f.sizes ?? [];
       if (mode === "fill" && items.some((i) => !i.closed)) out.warnings.push(t("{layer}: open paths can't be filled and are skipped.", { layer: name }));
       for (const fill of f.cands) {
         const first = fill[0]!;
@@ -136,6 +162,7 @@ export function planToolpath(doc: Doc, opts: PlanOptions): Toolpath {
   }
 
   const motion = opts.motion ?? DEFAULT_PROFILE;
+  const rows: Rows = { motion: rowMotion(out.layers, motion), bounds: opts.bounds };
   const ctx: Ctx = { cost: travelTime(motion), accel: motion.accel, home: opts.start, innerFirst: opts.innerFirst, layers: out.layers, tuning: opts.tuning };
   const rel = relations(work, opts.innerFirst);
   const want = opts.order ?? "auto";
@@ -150,12 +177,27 @@ export function planToolpath(doc: Doc, opts: PlanOptions): Toolpath {
   } else {
     const object = byObject(work, rel!, out.layers.length, ctx);
     const layer = rel!.crossLayer ? null : byLayer(work, out.layers.length, ctx);
-    const time = (u: Unit[]) => estimate({ ...out, segments: emit(out, u, opts.start) }, motion).total;
+    const time = (u: Unit[]) => estimate({ ...out, segments: emit(out, u, opts.start, rows) }, motion).total;
     if (layer && time(layer) <= time(object) + 1e-9) [units, out.order] = [layer, "layer"];
     else [units, out.order] = [object, "object"];
   }
-  out.segments = emit(out, units, opts.start);
+  out.segments = emit(out, units, opts.start, rows);
   return out;
+}
+
+/** Overscan and scan-offset shift for each fill layer of the toolpath. */
+function rowMotion(layers: Layer[], m: MotionProfile): RowMotion[] {
+  return layers.map((l) => ({
+    lead: overscanLength(l.overscan, l.speed, m),
+    shift: (l.scanOffset ?? scanOffsetAt(l.speed, m.scanOffsets)) / 2,
+  }));
+}
+
+/** Kerf-compensated cut items: closed outlines grow by kerf/2, holes inside them shrink; open paths stay. */
+function withKerf(items: Item[], kerf: number): Item[] {
+  const closed = items.filter((i) => i.closed && i.pts.length >= 3);
+  const grown = kerfRings(closed.map((i) => i.pts), kerf).flat();
+  return [...items.filter((i) => !(i.closed && i.pts.length >= 3)), ...grown.map((pts) => ({ pts, closed: true, box: pathsBox([{ points: pts, closed: true }]) }))];
 }
 
 const mid = (a: Vec, b: Vec): Vec => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
@@ -268,7 +310,7 @@ function unionBox(boxes: Box[]): Box {
 function pushFills(units: Unit[], ws: Work[], from: Vec, ctx: Ctx, to?: Vec): Vec {
   if (!ws.length) return from;
   const ordered = orderFills(ws.map((w) => w.fill!), from, ctx, to);
-  for (const paths of ordered) units.push({ li: ws[0]!.li, paths });
+  for (const paths of ordered) units.push({ li: ws[0]!.li, paths, fill: true });
   return ordered.at(-1)!.at(-1)!.at(-1)!;
 }
 
@@ -280,13 +322,23 @@ function pushCuts(units: Unit[], ws: Work[], from: Vec, ctx: Ctx, to?: Vec): Vec
   return order.at(-1)!.pts.at(-1)!;
 }
 
+interface Rows {
+  motion: RowMotion[];
+  bounds?: Box;
+}
+
 /** Turn units into segments, each unit with all of its layer's passes, joined by travel; back to `start` at the end. */
-function emit(out: Toolpath, units: Unit[], start: Vec): Segment[] {
+function emit(out: Toolpath, units: Unit[], start: Vec, rows?: Rows): Segment[] {
   const segs: Segment[] = [];
   let pos = start;
   for (const unit of units) {
     const passes = out.layers[unit.li]!.passes;
+    const rm = rows?.motion[unit.li];
     for (let pass = 0; pass < passes; pass++) {
+      if (unit.fill && rm) {
+        pos = emitRows(segs, pos, unit, rm, rows?.bounds);
+        continue;
+      }
       for (const path of unit.paths) {
         // A lone open path is cut back and forth on alternate passes instead of travelling back to its start.
         const pts = unit.paths.length === 1 && pass % 2 === 1 && !samePoint(path[0]!, path.at(-1)!) ? [...path].reverse() : path;
@@ -304,6 +356,75 @@ function emit(out: Toolpath, units: Unit[], start: Vec): Segment[] {
   return segs;
 }
 
+const dirOf = (p: Vec[]): Vec | null => {
+  if (p.length !== 2) return null;
+  const [dx, dy] = [p[1]!.x - p[0]!.x, p[1]!.y - p[0]!.y];
+  const len = Math.hypot(dx, dy);
+  return len > 1e-9 ? { x: dx / len, y: dy / len } : null;
+};
+
+/** Longest t ≤ len such that p + t·d stays inside the box (0 when p is outside). */
+function reach(p: Vec, d: Vec, len: number, b?: Box): number {
+  if (!b) return len;
+  let t = len;
+  if (d.x > 1e-12) t = Math.min(t, (b.maxX - p.x) / d.x);
+  if (d.x < -1e-12) t = Math.min(t, (b.minX - p.x) / d.x);
+  if (d.y > 1e-12) t = Math.min(t, (b.maxY - p.y) / d.y);
+  if (d.y < -1e-12) t = Math.min(t, (b.minY - p.y) / d.y);
+  return Math.max(0, t);
+}
+
+/**
+ * One pass of a fill unit. Straight burns (lines, dots) are shifted back along their direction by half the scan
+ * offset. Burns that continue one another along a row are joined by lead moves (the head keeps going); each row
+ * gets `lead` mm of overscan before its first burn and after its last, inside `bounds`.
+ */
+function emitRows(segs: Segment[], from: Vec, unit: Unit, rm: RowMotion, bounds?: Box): Vec {
+  const li = unit.li;
+  const burns = unit.paths.map((p) => {
+    const d = dirOf(p);
+    if (!d || !rm.shift) return { pts: p, d };
+    const [sx, sy] = [-d.x * rm.shift, -d.y * rm.shift];
+    return { pts: p.map((v) => ({ x: v.x + sx, y: v.y + sy })), d };
+  });
+  const inLine = (a: (typeof burns)[number], b: (typeof burns)[number]) => {
+    if (!a.d || !b.d || a.d.x * b.d.x + a.d.y * b.d.y < 0.999999) return false;
+    const [e, s] = [a.pts.at(-1)!, b.pts[0]!];
+    const [dx, dy] = [s.x - e.x, s.y - e.y];
+    return Math.abs(dx * a.d.y - dy * a.d.x) < 1e-6 && dx * a.d.x + dy * a.d.y > -1e-9;
+  };
+  const lead = (a: Vec, b: Vec) => {
+    if (Math.hypot(b.x - a.x, b.y - a.y) >= 1e-6) segs.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y, cut: false, layer: li, lead: true });
+  };
+  let pos = from;
+  burns.forEach((b, k) => {
+    const first = b.pts[0]!;
+    const rowStart = k === 0 || !inLine(burns[k - 1]!, b);
+    if (rowStart) {
+      if (b.d && rm.lead > 0) {
+        const back = { x: -b.d.x, y: -b.d.y };
+        const t = reach(first, back, rm.lead, bounds);
+        const at = { x: first.x + back.x * t, y: first.y + back.y * t };
+        travel(segs, pos, at);
+        lead(at, first);
+      } else travel(segs, pos, first);
+    } else lead(pos, first);
+    for (let i = 1; i < b.pts.length; i++) {
+      const [p, q] = [b.pts[i - 1]!, b.pts[i]!];
+      segs.push({ x0: p.x, y0: p.y, x1: q.x, y1: q.y, cut: true, layer: li });
+    }
+    pos = b.pts.at(-1)!;
+    const rowEnd = k === burns.length - 1 || !inLine(b, burns[k + 1]!);
+    if (rowEnd && b.d && rm.lead > 0) {
+      const t = reach(pos, b.d, rm.lead, bounds);
+      const at = { x: pos.x + b.d.x * t, y: pos.y + b.d.y * t };
+      lead(pos, at);
+      pos = at;
+    }
+  });
+  return pos;
+}
+
 /**
  * Fill sweeps for a layer: the filled areas ("islands") grouped into clusters swept together when that's quicker,
  * each cluster hatched separately. Offset contours go island by island.
@@ -312,20 +433,24 @@ function emit(out: Toolpath, units: Unit[], start: Vec): Segment[] {
  * gap between them; apart, the head jumps between them once. So: together when shared rows × gap < that one jump.
  * (Inside a sweep, the hatch applies the same rule to the parts of an area, see `fill.ts`.)
  */
-export function fillCandidates(groups: Vec[][][], s: FillSettings): { cands: Vec[][][]; error?: string } {
+export function fillCandidates(groups: Vec[][][], s: FillSettings, sweep: SweepMode = "quick"): { cands: Vec[][][]; sizes?: number[]; error?: string } {
   const islands = fillIslands(groups);
   if (!islands.length) return { cands: [] };
-  const clusters = s.pattern === "offset" ? islands.map((i) => [i]) : clusterIslands(islands, s);
+  const clusters = s.pattern === "offset" || sweep === "separate" ? islands.map((i) => [i]) : clusterIslands(islands, s, sweep === "together");
   const cands: Vec[][][] = [];
+  const sizes: number[] = [];
   let total = 0;
   for (const cl of clusters) {
-    const f = fillPaths(cl.flat(), s);
+    const f = fillPaths(cl.flat(), s, undefined, sweep);
     if (f.error) return { cands: [], error: f.error };
     total += f.paths.length;
     if (total > MAX_FILL_PATHS) return { cands: [], error: tooDenseMessage() };
-    if (f.paths.length) cands.push(f.paths);
+    if (f.paths.length) {
+      cands.push(f.paths);
+      sizes.push(cl.length);
+    }
   }
-  return { cands };
+  return { cands, sizes };
 }
 
 /** Sweeps in travel-time order (`order.ts`, each as an open path from its first to its last point). */
@@ -340,7 +465,7 @@ function orderFills(cand: Vec[][][], from: Vec, ctx: Pick<Ctx, "cost" | "tuning"
 }
 
 /** Fill units for one layer's areas, in travel-time order from `from` (each with all passes before the next). */
-export function fillUnits(groups: Vec[][][], s: FillSettings, from: Vec, motion: { travelSpeed: number; accel: number } = DEFAULT_PROFILE): { units: Vec[][][]; error?: string } {
+export function fillUnits(groups: Vec[][][], s: FillSettings, from: Vec, motion: MotionProfile = DEFAULT_PROFILE): { units: Vec[][][]; error?: string } {
   const c = fillCandidates(groups, s);
   if (c.error) return { units: [], error: c.error };
   return { units: c.cands.length ? orderFills(c.cands, from, { cost: travelTime(motion) }) : [] };
@@ -349,7 +474,7 @@ export function fillUnits(groups: Vec[][][], s: FillSettings, from: Vec, motion:
 /** Above this many islands, sweep them all as one (the pairwise test is O(n²)). */
 const CLUSTER_LIMIT = 2000;
 
-function clusterIslands(islands: Vec[][][], s: FillSettings): Vec[][][][] {
+function clusterIslands(islands: Vec[][][], s: FillSettings, together = false): Vec[][][][] {
   if (islands.length > CLUSTER_LIMIT) return [islands];
   const a = (-s.angle * Math.PI) / 180;
   const [c, sn] = [Math.cos(a), Math.sin(a)];
@@ -373,7 +498,7 @@ function clusterIslands(islands: Vec[][][], s: FillSettings): Vec[][][][] {
       if (shared <= 0) continue;
       const gap = Math.max(0, B.x0 - A.x1, A.x0 - B.x1);
       const jump = Math.hypot((A.x0 + A.x1 - B.x0 - B.x1) / 2, (A.y0 + A.y1 - B.y0 - B.y1) / 2);
-      if ((shared / interval) * gap < jump) parent[find(i)] = find(j);
+      if (together || (shared / interval) * gap < jump) parent[find(i)] = find(j);
     }
   }
   const groups = new Map<number, Vec[][][]>();

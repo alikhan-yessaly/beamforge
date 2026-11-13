@@ -3,6 +3,7 @@
 import { t } from "../i18n";
 import { type RdJobInput, type RdLayer, type PointUm, encodeJob } from "../protocol/jobEncode";
 import { type Doc, type MachineProfile, toUser } from "../scene/model";
+import type { Box } from "../geom/geom";
 import { type JobOrder, type Toolpath, planToolpath } from "./plan";
 import { apply } from "../geom/geom";
 import { visibleDocument } from "./layers";
@@ -49,13 +50,30 @@ export function designOrigin(doc: Doc, profile: MachineProfile): PointUm | null 
   return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
 }
 
+/**
+ * Where laser-off overscan may go (internal bed mm): the bed; when the job starts from the head, also not past the
+ * design's corner nearest home (the job's origin), since coordinates there would be negative.
+ */
+export function moveBounds(doc: Doc, profile: MachineProfile, mode: BuildOptions["mode"]): Box {
+  const b = { minX: 0, minY: 0, maxX: profile.bedW, maxY: profile.bedH };
+  if (mode !== "current") return b;
+  const o = designOrigin(doc, profile);
+  if (!o) return b;
+  const right = profile.origin.endsWith("right");
+  const bottom = profile.origin.startsWith("bottom");
+  const x = right ? profile.bedW - o.x / 1000 : o.x / 1000;
+  const y = bottom ? profile.bedH - o.y / 1000 : o.y / 1000;
+  return { minX: right ? b.minX : x, maxX: right ? x : b.maxX, minY: bottom ? b.minY : y, maxY: bottom ? y : b.maxY };
+}
+
 export function buildJob(doc: Doc, profile: MachineProfile, opts: BuildOptions): BuiltJob {
   const home = { x: profile.origin.endsWith("right") ? profile.bedW : 0, y: profile.origin.startsWith("bottom") ? profile.bedH : 0 };
-  const tp = planToolpath(doc, { start: home, innerFirst: opts.innerFirst, order: opts.order, motion: profile });
+  const tp = planToolpath(doc, { start: home, innerFirst: opts.innerFirst, order: opts.order, motion: profile, bounds: moveBounds(doc, profile, opts.mode) });
   if (tp.errors.length) throw new Error(tp.errors.join(" "));
   if (!tp.segments.some((s) => s.cut)) throw new Error(t("Nothing to cut: no layer with output on has any paths"));
 
-  // Segments → per-layer paths. A cut that doesn't continue from the previous cut starts a new path.
+  // Segments → per-layer paths. A cut that doesn't continue from the previous cut starts a new path. Lead moves
+  // (overscan, gaps inside an engraved row) become explicit laser-off moves: one-point paths on the fill's layer.
   const layers: RdLayer[] = tp.layers.map((l) => ({ speed: l.speed, minPower: l.minPower, maxPower: l.maxPower, color: l.color, paths: [] }));
   // Runs of consecutive paths on one layer, in cut order (object-by-object jobs switch layers back and forth).
   const blocks: { layer: number; paths: PointUm[][] }[] = [];
@@ -64,6 +82,17 @@ export function buildJob(doc: Doc, profile: MachineProfile, opts: BuildOptions):
   for (const s of tp.segments) {
     if (!s.cut) {
       path = null;
+      if (s.lead && s.layer >= 0) {
+        for (const v of [{ x: s.x0, y: s.y0 }, { x: s.x1, y: s.y1 }]) {
+          const m = toMachineUm(profile, v);
+          if (last && last.li === s.layer && last.x === m.x && last.y === m.y) continue;
+          const move = [m];
+          layers[s.layer]!.paths.push(move);
+          if (blocks.at(-1)?.layer !== s.layer) blocks.push({ layer: s.layer, paths: [] });
+          blocks.at(-1)!.paths.push(move);
+          last = { li: s.layer, x: m.x, y: m.y };
+        }
+      }
       continue;
     }
     const a = toMachineUm(profile, { x: s.x0, y: s.y0 });

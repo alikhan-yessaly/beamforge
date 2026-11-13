@@ -4,6 +4,7 @@ import { t } from "../i18n";
 import type { Doc, Layer, SceneObject, ScenePath } from "../scene/model";
 import { migrateDoc } from "../job/layers";
 import type { JobOrder } from "../job/plan";
+import { type MaterialPreset, validPreset } from "../machine/presets";
 
 export const PROJECT_EXT = ".laserproj";
 export const PROJECT_FORMAT = "laserproj";
@@ -33,10 +34,14 @@ export interface ProjectFile {
   machine: ProjectMachine;
   job: ProjectJob;
   doc: Doc;
+  /** The material presets the layers use (a copy, so the file still opens with them on another machine). */
+  materials?: MaterialPreset[];
 }
 
-export function serializeProject(doc: Doc, job: ProjectJob, machine: ProjectMachine, now = new Date()): string {
-  const file: ProjectFile = { format: PROJECT_FORMAT, version: PROJECT_VERSION, app: "ruida-web", savedAt: now.toISOString(), machine, job, doc };
+export function serializeProject(doc: Doc, job: ProjectJob, machine: ProjectMachine, now = new Date(), materials: MaterialPreset[] = []): string {
+  const used = new Set((doc.layers ?? []).map((l) => l.material).filter(Boolean));
+  const mats = materials.filter((m) => used.has(m.id));
+  const file: ProjectFile = { format: PROJECT_FORMAT, version: PROJECT_VERSION, app: "ruida-web", savedAt: now.toISOString(), machine, job, doc, ...(mats.length ? { materials: mats } : {}) };
   return JSON.stringify(file, null, 1);
 }
 
@@ -111,7 +116,29 @@ export function parseProject(text: string): ProjectFile {
       order: job.order === "layer" || job.order === "object" ? job.order : "auto",
     },
     doc: migrateDoc({ objects, layers }),
+    materials: Array.isArray(raw.materials)
+      ? raw.materials.filter((m): m is MaterialPreset => isObj(m) && isStr(m.id) && isStr(m.name) && isStr(m.machine) && validPreset(m as unknown as MaterialPreset))
+      : [],
   };
+}
+
+const sameSettings = (a: MaterialPreset, b: MaterialPreset) =>
+  a.speed === b.speed && a.minPower === b.minPower && a.maxPower === b.maxPower && a.passes === b.passes && (a.kerf ?? 0) === (b.kerf ?? 0);
+
+/**
+ * A file's materials against the local library: ones the library doesn't have, and ones it has (same id) with
+ * different settings.
+ */
+export function compareMaterials(file: MaterialPreset[], local: MaterialPreset[]): { missing: MaterialPreset[]; differ: { file: MaterialPreset; local: MaterialPreset }[] } {
+  const byId = new Map(local.map((m) => [m.id, m]));
+  const missing: MaterialPreset[] = [];
+  const differ: { file: MaterialPreset; local: MaterialPreset }[] = [];
+  for (const f of file) {
+    const l = byId.get(f.id);
+    if (!l) missing.push(f);
+    else if (!sameSettings(f, l)) differ.push({ file: f, local: l });
+  }
+  return { missing, differ };
 }
 
 /** Project name from a file name: "plate.laserproj" → "plate". */

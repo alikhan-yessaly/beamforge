@@ -1,4 +1,4 @@
-import { msg, t } from "../i18n";
+import { msg, t, tp } from "../i18n";
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -10,6 +10,8 @@ import {
   BookmarkPlus,
   Check,
   CopyPlus,
+  FileDown,
+  FileUp,
   FlipHorizontal2,
   FlipVertical2,
   Group,
@@ -20,10 +22,12 @@ import {
   LockOpen,
   Magnet,
   PaintBucket,
+  Plus,
   Redo2,
   RefreshCw,
   RotateCcw,
   RotateCw,
+  SlidersHorizontal,
   Trash2,
   Undo2,
   Ungroup,
@@ -37,9 +41,12 @@ import { newSketch } from "./sketch/state";
 import { shortcutsOpen } from "./ShortcutSheet";
 import { NumberInput } from "../ui/NumberInput";
 import { IconButton, IconToggle } from "../ui/icons";
-import { type Anchor, type MachineProfile, type OriginCorner, fromUser, toUser, anchorPoint } from "../scene/model";
+import { ASSUMED_MIN_FIRE_POWER, ASSUMED_START_SPEED, type Anchor, DEFAULT_PROFILE, type MachineProfile, type OriginCorner, fromUser, toUser, anchorPoint } from "../scene/model";
+import { MACHINE_CLASSES, applyClass, classById } from "../machine/classes";
+import { TUNE_EXT, parseTune, serializeTune } from "../machine/tuneFile";
+import { presetOf, presets, savePresets } from "./materials";
 import { type AlignMode, align, objectScale, selectionBox, setObjectScale, setSelectionBox } from "../scene/ops";
-import { canRedo, canUndo, commit, cursor, doc, messages, notify, prefs, profile, selBox, selection } from "../scene/store";
+import { addMachine, canRedo, canUndo, commit, cursor, doc, machinePrompt, machines, messages, notify, prefs, profile, removeMachine, selBox, selectMachine, selection, updateMachine } from "../scene/store";
 import { IMPORT_ACCEPT, actions, importFiles } from "./actions";
 import { ExportDesign, ImportDesign } from "../ui/customIcons";
 import { openExport } from "./ExportDialog";
@@ -225,26 +232,119 @@ export function ObjectsPanel() {
 
 const CORNERS: OriginCorner[] = ["top-left", "top-right", "bottom-left", "bottom-right"];
 
-/** Machine profile, inline in the Machine tab. `advanced` adds saved machine origins (developer mode). */
+/** Scan offsets as "speed: offset" pairs, e.g. "100: 0.1, 300: 0.25". */
+const scanText = (t_: MachineProfile["scanOffsets"]) => (t_ ?? []).map((e) => `${e.speed}: ${e.offset}`).join(", ");
+function parseScan(text: string): MachineProfile["scanOffsets"] | null {
+  const out: { speed: number; offset: number }[] = [];
+  for (const part of text.split(",").map((x) => x.trim()).filter(Boolean)) {
+    const m = /^(\d+(?:\.\d+)?)\s*:\s*(-?\d+(?:\.\d+)?)$/.exec(part);
+    if (!m) return null;
+    out.push({ speed: Number(m[1]), offset: Number(m[2]) });
+  }
+  return out;
+}
+
+function NumRow(props: { label: string; value: number | undefined; min?: number; max?: number; disabled?: boolean; onInput: (v: number) => void; title?: string }) {
+  return (
+    <label title={props.title}>
+      {props.label} <input type="number" min={props.min} max={props.max} disabled={props.disabled} value={props.value ?? ""} onInput={(e) => props.onInput(Number(e.currentTarget.value))} />
+    </label>
+  );
+}
+
+/**
+ * Machine profiles, inline in the Machine tab: pick the active machine, its class (typical defaults), bed and
+ * origin; advanced mode adds the raw motion and firing values and tuning files; `advanced` (developer mode) adds
+ * saved machine origins.
+ */
 export function ProfileSection(props: { advanced: boolean }) {
   const [draft, setDraft] = useState<MachineProfile>(profile.value);
+  const [scan, setScan] = useState(scanText(profile.value.scanOffsets));
   const [saved, setSaved] = useState<SavedMachineOrigin[]>([]);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [selectedMachine, setSelectedMachine] = useState("");
+  const tuneRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     try { setSaved(parseMachineOrigins(localStorage.getItem(MACHINE_ORIGINS_KEY))); }
     catch (e) { setStorageError(t("Cannot load saved machine origins: {error}", { error: e instanceof Error ? e.message : String(e) })); }
   }, []);
   const bed = bedLoad.value;
   const currentProfile = profile.value;
+  // Another profile became active, or it changed elsewhere (tuning, bed read): start over from it.
   useEffect(() => {
-    if (bed.state === "ready") setDraft((d) => ({ ...d, bedW: currentProfile.bedW, bedH: currentProfile.bedH }));
-  }, [bed.state, currentProfile.bedW, currentProfile.bedH]);
+    setDraft(currentProfile);
+    setScan(scanText(currentProfile.scanOffsets));
+  }, [currentProfile]);
   const cardId = linkState.value === "verified" ? link.cardId : null;
+  const adv = prefs.value.advanced;
+  const list = machines.value;
+  const cls = classById(draft.class);
+  const saveDraft = () => {
+    const scanOffsets = parseScan(scan);
+    if (scanOffsets === null) return notify(t("Scan offsets: write speed: offset pairs separated by commas, e.g. 100: 0.1, 300: 0.25"), "error");
+    const ok = draft.name.trim() && draft.bedW > 0 && draft.bedH > 0 && draft.travelSpeed > 0 && draft.accel > 0 && (draft.frameSpeed ?? 30) > 0 && (draft.frameSpeed ?? 30) <= 300 &&
+      (draft.startSpeed ?? 10) >= 0 && (draft.minFirePower ?? 10) >= 0 && (draft.minFirePower ?? 10) <= 100;
+    if (!ok) return notify(t("Machine profile values must be positive (frame speed at most 300 mm/s)."), "error");
+    profile.value = { ...(cardId !== null ? { ...draft, bedW: profile.value.bedW, bedH: profile.value.bedH } : draft), name: draft.name.trim(), scanOffsets };
+    notify(t("Machine profile saved."));
+  };
+  const exportTune = () => {
+    const p = profile.value;
+    const text = serializeTune(p, presets.value.filter((m) => presetOf(m, p)));
+    const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: `${p.name.replace(/[\\/:*?"<>|]+/g, "-") || "machine"}${TUNE_EXT}` });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const importTune = async (file: File) => {
+    try {
+      const f = parseTune(await file.text());
+      const existing = list.find((m) => m.id && m.id === f.profile.id);
+      if (existing && !window.confirm(t("Replace the tuning of \"{name}\" with the file's (saved {date})?", { name: existing.name, date: f.savedAt.slice(0, 10) }))) return;
+      const m = existing ? f.profile : addMachine(f.profile, false);
+      if (existing) updateMachine(m);
+      // The file's materials replace this machine's library.
+      const mats = f.materials.map((x) => ({ ...x, machine: m.name, machineId: m.id }));
+      savePresets([...presets.value.filter((x) => !presetOf(x, m)), ...mats]);
+      selectMachine(m.id!);
+      notify(tp(["Loaded the tuning of \"{name}\" ({n} material).", "Loaded the tuning of \"{name}\" ({n} materials)."], mats.length, { name: m.name }));
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), "error");
+    }
+  };
   return (
     <section class="ws-panel ws-profile">
       <h3>{t("Machine profile")}</h3>
+      <div class="ws-row">
+        <select class="ws-grow" aria-label={t("Active machine profile")} value={currentProfile.id} onChange={(e) => selectMachine(e.currentTarget.value)}>
+          {list.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+              {m.controller ? ` · card 0x${m.controller.cardId.toString(16)}` : ""}
+            </option>
+          ))}
+        </select>
+        <IconButton icon={Plus} label={t("New machine profile")} onClick={() => {
+          const m = addMachine({ ...DEFAULT_PROFILE, name: t("Machine {n}", { n: list.length + 1 }) });
+          machinePrompt.value = { kind: "class", id: m.id!, resolve: () => {} };
+        }} />
+        <IconButton icon={Trash2} label={t("Delete this machine profile")} disabled={list.length <= 1} onClick={() => {
+          if (window.confirm(t("Delete the machine profile \"{name}\"? Its material presets stay in the library but won't be listed.", { name: currentProfile.name }))) removeMachine(currentProfile.id!);
+        }} />
+      </div>
       <label>{t("Name")}{" "}<input value={draft.name} onInput={(e) => setDraft({ ...draft, name: e.currentTarget.value })} />
+      </label>
+      <label title={t("Typical motion values and starting materials for this kind of machine. Tuning replaces them with your machine's own.")}>
+        {t("Machine class")}
+        <select value={draft.class ?? ""} onChange={(e) => {
+          const c = classById(e.currentTarget.value);
+          if (c) setDraft(applyClass(draft, c, cardId !== null));
+        }}>
+          {!draft.class && <option value="">{t("Not chosen")}</option>}
+          {MACHINE_CLASSES.map((c) => (
+            <option key={c.id} value={c.id}>{t(c.name)}</option>
+          ))}
+        </select>
       </label>
       <label>
         {t("Bed width (mm)")} <input type="number" min={1} disabled={cardId !== null} value={draft.bedW} onInput={(e) => setDraft({ ...draft, bedW: Number(e.currentTarget.value) })} />
@@ -255,15 +355,7 @@ export function ProfileSection(props: { advanced: boolean }) {
       {cardId !== null && <p class="ws-hint" role={bed.state === "error" ? "alert" : undefined}>{bed.message}
         {bed.state === "error" && <IconButton icon={RefreshCw} label={t("Retry the bed read")} onClick={() => void refreshBedDimensions()} />}
       </p>}
-      <label>
-        {t("Travel speed (mm/s)")} <input type="number" min={1} value={draft.travelSpeed} onInput={(e) => setDraft({ ...draft, travelSpeed: Number(e.currentTarget.value) })} />
-      </label>
-      <label>
-        {t("Frame speed (mm/s)")} <input type="number" min={1} max={300} value={draft.frameSpeed ?? 30} onInput={(e) => setDraft({ ...draft, frameSpeed: Number(e.currentTarget.value) })} />
-      </label>
-      <label>
-        {t("Acceleration (mm/s²)")} <input type="number" min={1} value={draft.accel} onInput={(e) => setDraft({ ...draft, accel: Number(e.currentTarget.value) })} />
-      </label>
+      <NumRow label={t("Frame speed (mm/s)")} min={1} max={300} value={draft.frameSpeed ?? 30} onInput={(frameSpeed) => setDraft({ ...draft, frameSpeed })} />
       <label>
         {t("Machine origin (home corner)")}
         <select value={draft.origin} onChange={(e) => setDraft({ ...draft, origin: e.currentTarget.value as OriginCorner })}>
@@ -274,7 +366,23 @@ export function ProfileSection(props: { advanced: boolean }) {
           ))}
         </select>
       </label>
-      <p class="ws-hint">{t("The origin corner is where the head goes when it homes. Coordinates and rulers are measured from it. Travel speed and acceleration set the time estimate and the cut order (the quickest travel); the machine uses its own.")}</p>
+      {adv ? (
+        <>
+          <NumRow label={t("Travel speed (mm/s)")} min={1} value={draft.travelSpeed} onInput={(travelSpeed) => setDraft({ ...draft, travelSpeed })} />
+          <NumRow label={t("Acceleration (mm/s²)")} min={1} value={draft.accel} onInput={(accel) => setDraft({ ...draft, accel })} />
+          <NumRow label={t("Start speed (mm/s)")} min={0} value={draft.startSpeed ?? ASSUMED_START_SPEED} title={t("The controller's start speed: moves start and stop at it, and corner power applies at or below it.")} onInput={(startSpeed) => setDraft({ ...draft, startSpeed })} />
+          <NumRow label={t("Lowest firing power (%)")} min={0} max={100} value={draft.minFirePower ?? ASSUMED_MIN_FIRE_POWER} title={t("The lowest power at which the tube still fires reliably; suggested corner powers never go below it.")} onInput={(minFirePower) => setDraft({ ...draft, minFirePower })} />
+          <label title={t("How far rows engraved right to left land from rows engraved left to right, per speed. Measured with the scan offset test card.")}>
+            {t("Scan offsets (speed: mm)")} <input value={scan} placeholder="100: 0.1, 300: 0.25" onInput={(e) => setScan(e.currentTarget.value)} />
+          </label>
+          <p class="ws-hint">{t("The origin corner is where the head goes when it homes. Coordinates and rulers are measured from it. Travel speed and acceleration set the time estimate and the cut order (the quickest travel); the machine uses its own.")}</p>
+        </>
+      ) : (
+        <p class="ws-hint">
+          {cls ? t("Motion values: {class}{tuned}.", { class: t(cls.name), tuned: currentProfile.tuning?.fill ? t(", tuned {date}", { date: currentProfile.tuning.fill }) : "" }) : t("Choose the machine class for typical motion values.")}{" "}
+          {t("Advanced mode (status bar) shows every value.")}
+        </p>
+      )}
       {props.advanced && <>
       <h3>{t("Saved machine origins")}</h3>
       <p class="ws-hint">{t("Card IDs identify controller types, not individual machines. Choose your machine by name and confirm its physical home corner; it is never detected automatically.")}</p>
@@ -310,17 +418,20 @@ export function ProfileSection(props: { advanced: boolean }) {
       </div>
       </>}
       <div class="ws-row">
-        <IconButton
-          icon={Check}
-          label={t("Save the profile")}
-          onClick={() => {
-            if (draft.bedW > 0 && draft.bedH > 0 && draft.travelSpeed > 0 && draft.accel > 0 && (draft.frameSpeed ?? 30) > 0 && (draft.frameSpeed ?? 30) <= 300) {
-              profile.value = cardId !== null ? { ...draft, bedW: profile.value.bedW, bedH: profile.value.bedH } : draft;
-              notify(t("Machine profile saved."));
-            } else notify(t("Machine profile values must be positive (frame speed at most 300 mm/s)."), "error");
-          }}
-        />
-        <IconButton icon={Undo2} label={t("Discard changes")} onClick={() => setDraft(profile.value)} />
+        <IconButton icon={Check} label={t("Save the profile")} onClick={saveDraft} />
+        <IconButton icon={Undo2} label={t("Discard changes")} onClick={() => { setDraft(profile.value); setScan(scanText(profile.value.scanOffsets)); }} />
+        {adv && (
+          <>
+            <span class="ws-grow" />
+            <IconButton icon={FileDown} label={t("Save this machine's tuning and materials as a .beamtune file")} onClick={exportTune} />
+            <IconButton icon={FileUp} label={t("Load a .beamtune tuning file")} onClick={() => tuneRef.current?.click()} />
+            <input ref={tuneRef} type="file" accept={`${TUNE_EXT},application/json`} hidden onChange={(e) => {
+              const f = e.currentTarget.files?.[0];
+              if (f) void importTune(f);
+              e.currentTarget.value = "";
+            }} />
+          </>
+        )}
       </div>
     </section>
   );
@@ -385,6 +496,7 @@ export function StatusBar() {
       </span>
       <span class="ws-grow" />
       <PreviewBar />
+      <IconToggle on={prefs.value.advanced} onIcon={SlidersHorizontal} label={t("Advanced mode: every machine and tuning value, overscan length, kerf, tuning files")} onChange={(advanced) => (prefs.value = { ...prefs.value, advanced })} />
       <IconButton icon={Keyboard} label={t("Keyboard shortcuts (?)")} onClick={() => (shortcutsOpen.value = true)} />
     </div>
   );

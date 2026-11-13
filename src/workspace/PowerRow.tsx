@@ -7,9 +7,8 @@ import { t } from "../i18n";
 import { Flame, Link2, Unlink2 } from "lucide-preact";
 import { NumberInput } from "../ui/NumberInput";
 import { IconButton } from "../ui/icons";
+import { ASSUMED_START_SPEED as START } from "../scene/model";
 
-/** Typical Ruida start speed; the real value is a machine setting we can't read yet. */
-export const ASSUMED_START_SPEED = 10;
 
 export interface PowerPatch {
   minPower?: number;
@@ -22,7 +21,8 @@ function PctInput(props: { value: number; label: string; disabled?: boolean; onC
 }
 
 /** Speed → power sketch: flat at corner power up to the start speed, then rising to power at the layer speed. */
-export function PowerRamp(props: { min: number; max: number; speed: number }) {
+export function PowerRamp(props: { min: number; max: number; speed: number; start?: number }) {
+  const ASSUMED_START_SPEED = props.start ?? START;
   const w = 44;
   const h = 20;
   const y = (pct: number) => h - 2 - (Math.max(0, Math.min(100, pct)) / 100) * (h - 4);
@@ -41,8 +41,10 @@ export function PowerRamp(props: { min: number; max: number; speed: number }) {
   );
 }
 
-export function PowerRow(props: { min: number; max: number; speed: number; linked: boolean; onChange: (p: PowerPatch) => void }) {
+export function PowerRow(props: { min: number; max: number; speed: number; linked: boolean; onChange: (p: PowerPatch) => void; startSpeed?: number; suggest?: number }) {
+  const sg = props.suggest;
   return (
+    <>
     <div class="ws-power">
       <Flame size={14} strokeWidth={1.75} aria-hidden="true" />
       <PctInput value={props.max} label={t("Power at full speed (% of the tube's maximum)")} onCommit={(maxPower) => props.onChange({ maxPower })} />
@@ -61,7 +63,16 @@ export function PowerRow(props: { min: number; max: number; speed: number; linke
         pressed={props.linked}
         onClick={() => props.onChange({ linkPower: !props.linked })}
       />
-      <PowerRamp min={props.min} max={props.max} speed={props.speed} />
+      <PowerRamp min={props.min} max={props.max} speed={props.speed} start={props.startSpeed} />
     </div>
+    {sg !== undefined && sg < props.min - 0.05 && (
+      <div class="ws-suggest">
+        <small>{t("Suggested corner power: {p} % (even depth at row ends; the tube's lowest power allowing).", { p: sg })}</small>
+        <button type="button" class="ws-link-btn" onClick={() => props.onChange({ minPower: sg, linkPower: false })}>
+          {t("Use it")}
+        </button>
+      </div>
+    )}
+    </>
   );
 }
