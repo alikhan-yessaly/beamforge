@@ -15,8 +15,6 @@ import {
   FlipHorizontal2,
   FlipVertical2,
   Group,
-  Keyboard,
-  PenTool,
   LocateFixed,
   Lock,
   LockOpen,
@@ -34,11 +32,10 @@ import {
   X,
 } from "lucide-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { FitBed, FitSelection, ModeCut, ModeFill } from "../ui/customIcons";
+import { FitBed, FitSelection, ModeCut, ModeFill, SketchSheet } from "../ui/customIcons";
 import { fillTool, toggleFillTool } from "./fillTool";
 import { ProjectButtons } from "./ProjectButtons";
 import { newSketch } from "./sketch/state";
-import { shortcutsOpen } from "./ShortcutSheet";
 import { NumberInput } from "../ui/NumberInput";
 import { IconButton, IconToggle } from "../ui/icons";
 import { ASSUMED_MIN_FIRE_POWER, ASSUMED_START_SPEED, type Anchor, DEFAULT_PROFILE, type MachineProfile, type OriginCorner, fromUser, toUser, anchorPoint } from "../scene/model";
@@ -47,7 +44,10 @@ import { TUNE_EXT, parseTune, serializeTune } from "../machine/tuneFile";
 import { presetOf, presets, savePresets } from "./materials";
 import { type AlignMode, align, objectScale, selectionBox, setObjectScale, setSelectionBox } from "../scene/ops";
 import { addMachine, canRedo, canUndo, commit, cursor, doc, machinePrompt, machines, messages, notify, prefs, profile, removeMachine, selBox, selectMachine, selection, updateMachine } from "../scene/store";
-import { IMPORT_ACCEPT, actions, importFiles } from "./actions";
+import { HelpMenu } from "./HelpMenu";
+import { FirstJobChecklist } from "./FirstJobChecklist";
+import { IMPORT_ACCEPT, actions, importFiles, renameObject, renaming } from "./actions";
+import { InlineNameField } from "../ui/InlineName";
 import { ExportDesign, ImportDesign } from "../ui/customIcons";
 import { openExport } from "./ExportDialog";
 import { PreviewBar } from "./LayersPanel";
@@ -56,8 +56,9 @@ import { contextMenu } from "./ContextMenu";
 import { bedLoad, link, linkState, refreshBedDimensions } from "../app/connection";
 import { visibleDocument } from "../job/layers";
 import { MACHINE_ORIGINS_KEY, type SavedMachineOrigin, parseMachineOrigins } from "../app/machineSettings";
+import { More } from "../ui/More";
+import { SNAP_STEPS, type Units, formatLength, fromUnits, stepLabel, toUnits, unitDecimals } from "../scene/units";
 
-const fmt = (n: number) => (Math.abs(n) < 1e-9 ? "0" : n.toFixed(2).replace(/\.?0+$/, ""));
 
 /** Labelled position/size field (NumberInput: ↑/↓ and the wheel step by 1 mm, Shift 10, Alt 0.1). */
 function NumField(props: { label: string; value: number | null; onCommit: (v: number) => void; unit?: string; min?: number }) {
@@ -66,6 +67,26 @@ function NumField(props: { label: string; value: number | null; onCommit: (v: nu
       <span>{props.label}</span>
       <NumberInput value={props.value} label={props.label} min={props.min} disabled={props.value === null} onCommit={props.onCommit} onInvalid={(m) => notify(m, "error")} />
       {props.unit && <em>{props.unit}</em>}
+    </label>
+  );
+}
+
+/** A length field: shows and takes the chosen units, commits mm. */
+function LengthField(props: { label: string; mm: number | null; onCommit: (mm: number) => void; positive?: boolean }) {
+  const u = prefs.value.units ?? "mm";
+  return (
+    <label class="ws-num">
+      <span>{props.label}</span>
+      <NumberInput
+        value={props.mm === null ? null : toUnits(props.mm, u)}
+        maxDecimals={unitDecimals(u)}
+        label={`${props.label} (${u})`}
+        min={props.positive ? 0.001 : undefined}
+        disabled={props.mm === null}
+        onCommit={(v) => props.onCommit(fromUnits(v, u))}
+        onInvalid={(m) => notify(m, "error")}
+      />
+      <em>{u}</em>
     </label>
   );
 }
@@ -142,10 +163,10 @@ export function PropertiesPanel() {
       <div class="ws-grid2">
         <AnchorPicker />
         <div>
-          <NumField label="X" unit="mm" value={user?.x ?? null} onCommit={(x) => user && w !== null && h !== null && place(x, user.y, w, h)} />
-          <NumField label="Y" unit="mm" value={user?.y ?? null} onCommit={(y) => user && w !== null && h !== null && place(user.x, y, w, h)} />
-          <NumField label="W" unit="mm" value={w} min={0.001} onCommit={setW} />
-          <NumField label="H" unit="mm" value={h} min={0.001} onCommit={setH} />
+          <LengthField label="X" mm={user?.x ?? null} onCommit={(x) => user && w !== null && h !== null && place(x, user.y, w, h)} />
+          <LengthField label="Y" mm={user?.y ?? null} onCommit={(y) => user && w !== null && h !== null && place(user.x, y, w, h)} />
+          <LengthField label="W" mm={w} positive onCommit={setW} />
+          <LengthField label="H" mm={h} positive onCommit={setH} />
         </div>
       </div>
       <div class="ws-scale">
@@ -186,6 +207,10 @@ export function ObjectsPanel() {
   const visibleIds = new Set(visibleDocument(d).objects.map((o) => o.id));
   const ids = selection.value;
   const [open, setOpen] = useState(d.objects.length <= 3);
+  const editing = renaming.value;
+  useEffect(() => {
+    if (editing) setOpen(true);
+  }, [editing]);
   return (
     <details class="ws-panel ws-objects" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary>
@@ -194,10 +219,17 @@ export function ObjectsPanel() {
       <ul class="ws-list">
         {d.objects.map((o) => (
           <li key={o.id}>
+            {editing === o.id ? (
+              <InlineNameField value={o.name} label={t("Object name")} onCommit={(name) => renameObject(o.id, name)} onDone={() => (renaming.value = null)} />
+            ) : (
             <button
             type="button"
             disabled={!visibleIds.has(o.id)}
-            title={!visibleIds.has(o.id) ? t("All colours in this object are shown as shadows") : undefined}
+            title={!visibleIds.has(o.id) ? t("All colours in this object are shown as shadows") : t("Double-click or F2 to rename")}
+            onDblClick={() => {
+              selection.value = new Set([o.id]);
+              renaming.value = o.id;
+            }}
             class={ids.has(o.id) ? "on" : ""}
             aria-pressed={ids.has(o.id)}
             onContextMenu={(e) => {
@@ -222,6 +254,7 @@ export function ObjectsPanel() {
             {o.name}
             <small>{o.paths.length}</small>
             </button>
+            )}
           </li>
         ))}
         {d.objects.length === 0 && <li class="ws-empty">{t("Import a drawing or picture, or drop one on the canvas")}</li>}
@@ -394,17 +427,23 @@ export function ProfileSection(props: { advanced: boolean }) {
           <label title={t("How far rows engraved right to left land from rows engraved left to right, per speed. Measured with the scan offset test card.")}>
             {t("Scan offsets (speed: mm)")} <input value={scan} placeholder="100: 0.1, 300: 0.25" onInput={(e) => setScan(e.currentTarget.value)} />
           </label>
-          <p class="ws-hint">{t("The origin corner is where the head goes when it homes. Coordinates and rulers are measured from it. Travel speed and acceleration set the time estimate and the cut order (the quickest travel); the machine uses its own.")}</p>
+          <More id="profile-values" summary={t("What these values do")}>
+            <p>{t("The origin corner is where the head goes when it homes. Coordinates and rulers are measured from it. Travel speed and acceleration set the time estimate and the cut order (the quickest travel); the machine uses its own.")}</p>
+          </More>
         </>
       ) : (
-        <p class="ws-hint">
-          {cls ? t("Motion values: {class}{tuned}.", { class: t(cls.name), tuned: currentProfile.tuning?.fill ? t(", tuned {date}", { date: currentProfile.tuning.fill }) : "" }) : t("Choose the machine class for typical motion values.")}{" "}
-          {t("Advanced mode (status bar) shows every value.")}
-        </p>
+        <More id="profile-values" summary={t("What these values do")}>
+          <p>
+            {cls ? t("Motion values: {class}{tuned}.", { class: t(cls.name), tuned: currentProfile.tuning?.fill ? t(", tuned {date}", { date: currentProfile.tuning.fill }) : "" }) : t("Choose the machine class for typical motion values.")}{" "}
+            {t("Advanced mode (status bar) shows every value.")}
+          </p>
+        </More>
       )}
       {props.advanced && <>
       <h3>{t("Saved machine origins")}</h3>
-      <p class="ws-hint">{t("Card IDs identify controller types, not individual machines. Choose your machine by name and confirm its physical home corner; it is never detected automatically.")}</p>
+      <More id="saved-origins" summary={t("How saved origins work")}>
+        <p>{t("Card IDs identify controller types, not individual machines. Choose your machine by name and confirm its physical home corner; it is never detected automatically.")}</p>
+      </More>
       {storageError && <p class="warn" role="alert">{storageError}</p>}
       <label>{t("Saved machine")}<select value={selectedMachine} onChange={(e) => setSelectedMachine(e.currentTarget.value)}>
           <option value="">{t("Select a saved machine")}</option>
@@ -459,13 +498,14 @@ export function ProfileSection(props: { advanced: boolean }) {
 export function Toolbar() {
   const fileRef = useRef<HTMLInputElement>(null);
   const pr = prefs.value;
+  const units = pr.units ?? "mm";
   const has = selection.value.size > 0;
   return (
     <div class="ws-toolbar">
       <ProjectButtons />
       <IconButton icon={ImportDesign} label={t("Import… DXF, SVG, PDF, AI, PLT, CDR or a picture (PNG, JPEG, HEIC…)")} onClick={() => fileRef.current?.click()} />
       <IconButton icon={ExportDesign} label={t("Export… the selection or everything as SVG, DXF, PDF or PNG (⌘E)")} disabled={doc.value.objects.length === 0} onClick={openExport} />
-      <IconButton icon={PenTool} label={t("New sketch: draw lines, arcs, circles with dimensions and constraints")} onClick={() => void newSketch()} />
+      <IconButton icon={SketchSheet} label={t("New sketch: draw lines, arcs, circles with dimensions and constraints")} onClick={() => void newSketch()} />
       <input
         ref={fileRef}
         type="file"
@@ -493,9 +533,9 @@ export function Toolbar() {
       <span class="ws-sep" />
       <IconToggle on={pr.snapToGrid} onIcon={Magnet} label={t("Snap to grid (hold Alt while dragging to invert)")} onChange={(snapToGrid) => (prefs.value = { ...pr, snapToGrid })} />
       <select value={pr.gridStep} onChange={(e) => (prefs.value = { ...pr, gridStep: Number(e.currentTarget.value) })} title={t("Snap step")}>
-        {[0.5, 1, 5, 10, 50].map((s) => (
+        {snapOptions(pr.gridStep, units).map((s) => (
           <option key={s} value={s}>
-            {s} mm
+            {stepLabel(s, units)} {units}
           </option>
         ))}
       </select>
@@ -503,20 +543,48 @@ export function Toolbar() {
   );
 }
 
+/** The snap steps for the units, plus the current one if it isn't among them (it stays usable after switching units). */
+function snapOptions(current: number, units: Units): number[] {
+  const list = SNAP_STEPS[units];
+  return list.some((s) => Math.abs(s - current) < 1e-9) ? list : [...list, current].sort((a, b) => a - b);
+}
+
+function UnitsToggle() {
+  const units = prefs.value.units ?? "mm";
+  return (
+    <button
+      type="button"
+      class="ws-units"
+      title={t("Units for positions and sizes: millimetres or inches. Files and the machine always use mm.")}
+      onClick={() => {
+        const next: Units = units === "mm" ? "in" : "mm";
+        const step = prefs.value.gridStep;
+        const gridStep = SNAP_STEPS[next].reduce((best, s) => (Math.abs(s - step) < Math.abs(best - step) ? s : best));
+        prefs.value = { ...prefs.value, units: next, gridStep };
+      }}
+    >
+      {units}
+    </button>
+  );
+}
+
 export function StatusBar() {
   const c = cursor.value;
   const b = selBox.value;
   const p = profile.value;
+  const units = prefs.value.units ?? "mm";
   return (
     <div class="ws-status">
-      <span>{c ? formatUser(p, c) : " "}</span>
+      <span>{c ? formatUser(p, c, units) : " "}</span>
       <span>
-        {b ? `Selection ${fmt(b.maxX - b.minX)} × ${fmt(b.maxY - b.minY)} mm` : ""}
+        {b ? t("Selection {w} × {h} {unit}", { w: formatLength(b.maxX - b.minX, units), h: formatLength(b.maxY - b.minY, units), unit: units }) : ""}
       </span>
       <span class="ws-grow" />
       <PreviewBar />
       <IconToggle on={prefs.value.advanced} onIcon={SlidersHorizontal} label={t("Advanced mode: every machine and tuning value, overscan length, kerf, tuning files")} onChange={(advanced) => (prefs.value = { ...prefs.value, advanced })} />
-      <IconButton icon={Keyboard} label={t("Keyboard shortcuts (?)")} onClick={() => (shortcutsOpen.value = true)} />
+      <FirstJobChecklist />
+      <UnitsToggle />
+      <HelpMenu />
     </div>
   );
 }

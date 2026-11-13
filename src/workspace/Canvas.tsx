@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
+import { EmptyBed } from "./EmptyBed";
 import { type Box, type Vec, apply, distToSegment, invert, translate } from "../geom/geom";
 import { appMode } from "./mode";
 import type { Doc } from "../scene/model";
@@ -96,6 +97,7 @@ export function Canvas() {
   void imagesVersion.value; // and imported pictures once decoded
   void lang.value; // canvas labels follow the interface language
   const ft = fillTool.value;
+  const units = prefs.value.units ?? "mm";
   void fillHover.value;
   const fillPreview = ft ? hoverRings() : null;
 
@@ -114,9 +116,9 @@ export function Canvas() {
     if (ses) {
       // Sketch mode: everything else faded, the edited sketch drawn live on top.
       const others = { ...d, objects: d.objects.filter((o) => o.id !== ses.objectId) };
-      draw(ctx, size.w, size.h, dpr, v, others, p, { selection: new Set(), selBox: null, hover: null, marquee: null, dimObjects: true });
+      draw(ctx, size.w, size.h, dpr, v, others, p, { selection: new Set(), selBox: null, hover: null, marquee: null, dimObjects: true, units });
       drawSketch(ctx, v, ses, skPreview, skSuggestions);
-    } else draw(ctx, size.w, size.h, dpr, v, d, p, { selection: device ? new Set() : sel, selBox: device ? null : sb, hover: device ? null : hover, marquee, preview: pvData, head, projectedHead, jobOrigin, fillHover: ft && fillPreview ? { rings: fillPreview, color: ft.color } : null });
+    } else draw(ctx, size.w, size.h, dpr, v, d, p, { selection: device ? new Set() : sel, selBox: device ? null : sb, hover: device ? null : hover, marquee, preview: pvData, head, projectedHead, jobOrigin, fillHover: ft && fillPreview ? { rings: fillPreview, color: ft.color } : null, units });
   });
 
   useEffect(() => {
@@ -431,6 +433,7 @@ export function Canvas() {
           else if (!selBox.value) fitBed(profile.value);
         }}
       />
+      {!ses && !device && doc.value.objects.length === 0 && <EmptyBed />}
       {ses ? (
         <>
           <DimensionEditor />

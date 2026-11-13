@@ -33,6 +33,7 @@ import { type MaterialPreset, presets, presetsFor, savePresets } from "./materia
 import { kerfMeasured, presetOf, tunedMaterials } from "../machine/presets";
 import { newId } from "../scene/model";
 import { appMode, enterPrepare } from "./mode";
+import { More } from "../ui/More";
 
 /** Which step is open, or null when the wizard is closed. */
 export const tuningStep = signal<CardKind | null>(null);
@@ -431,7 +432,9 @@ export function TuningDialog() {
           );
         })}
       </nav>
-      <p>{t(info.why)}</p>
+      <More id="tune-why" summary={t("What this card measures")}>
+        <p>{t(info.why)}</p>
+      </More>
       {step === "scan" && <p class="ws-hint">{t("Current offset at 100 mm/s: {mm} mm.", { mm: scanOffsetAt(100, p.scanOffsets).toFixed(2) })}</p>}
       <h4>{t("1. Run the card")}</h4>
       <MakeCard kind={step} onMade={() => setMade((n) => n + 1)} />

@@ -591,3 +591,94 @@ body > #workspace { height: 100%; border: 0; }
 /* Stacked field labels in panels read like the profile's: small and muted above the control. */
 .ws .ws-panel label.ws-col { gap: .2rem; font-size: .75rem; color: var(--muted); }
 .ws .ws-panel label.ws-col > input, .ws .ws-panel label.ws-col > select { color: var(--ui-fg); }
+
+/* Folded explanations: a quiet one-line summary, the text below when opened. */
+.ws .ws-more { margin: .25rem 0 .5rem; font-size: .78rem; color: var(--muted); }
+.ws .ws-more > summary { display: inline-flex; align-items: center; gap: .2rem; cursor: pointer; list-style: none; user-select: none; color: var(--muted); border-radius: 4px; }
+.ws .ws-more > summary::-webkit-details-marker { display: none; }
+.ws .ws-more > summary:hover { color: var(--ui-fg); }
+.ws .ws-more > summary:focus-visible { outline: 2px solid rgba(37, 99, 235, .35); outline-offset: 2px; }
+.ws .ws-more > summary svg { transition: transform .15s; flex: none; }
+.ws .ws-more[open] > summary svg { transform: rotate(90deg); }
+.ws .ws-more-body { margin: .3rem 0 0 1.05rem; line-height: 1.45; }
+.ws .ws-more-body > p { margin: 0 0 .35rem; }
+.ws .ws-more-body > p:last-child { margin-bottom: 0; }
+
+/* Renaming in place: the field takes the name's spot. */
+.ws .ws-name-field { width: 100%; min-width: 0; height: var(--ctl-h-sm); }
+.ws .ws-project-name-field { width: 14rem; flex: none; }
+.ws .ws-list li > .ws-name-field { margin: 1px 0; }
+.ws-project-name { cursor: text; }
+.ws .ws-sketch-name { display: inline-flex; align-items: center; gap: .3rem; max-width: 12rem; min-width: 0; padding: 0 .35rem; color: var(--ui-fg); flex: none; }
+.ws .ws-sketch-name > svg { flex: none; color: var(--muted); }
+.ws .ws-sketch-name > b { font-weight: 600; font-size: var(--ctl-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
+.ws .ws-sketch-name > .ws-name-field { width: 10rem; }
+
+/* Notices under the beta strip: one line of text, a dismiss button. */
+.ws-notice { flex: none; display: flex; align-items: flex-start; gap: .5rem; padding: .4rem .6rem; font-size: .78rem; line-height: 1.4; border-bottom: 1px solid var(--ctl-border); }
+.ws-notice.warn { background: #fffbeb; color: #78350f; }
+.ws-notice.info { background: #eff6ff; color: #1e3a8a; }
+.ws-notice > svg { flex: none; margin-top: .1rem; }
+.ws-notice-text { flex: 1; min-width: 0; }
+.ws .ws-notice .ib { flex: none; width: 22px; height: 22px; min-width: 22px; min-height: 22px; padding: 0; background: transparent; border-color: transparent; }
+.ws .ws-notice .ws-link-btn { font-size: inherit; min-height: 0; padding: 0; }
+
+/* Welcome: three short steps and three ways to start. */
+.ws .ws-welcome { width: min(40rem, calc(100vw - 2rem)); }
+.ws .ws-welcome h2 { margin: 0 0 .25rem; font-size: 1.15rem; }
+.ws .ws-welcome h4 { margin: 1rem 0 .4rem; font-size: .85rem; }
+.ws .ws-welcome-langs { display: inline-flex; }
+.ws .ws-welcome-field { display: grid; gap: .2rem; max-width: 26rem; }
+.ws .ws-welcome-starts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.ws .ws-welcome-start { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; height: auto; padding: .75rem; text-align: left; white-space: normal; border-radius: 8px; }
+.ws .ws-welcome-start > svg { color: var(--accent); }
+.ws .ws-welcome-start > b { font-size: .88rem; }
+.ws .ws-welcome-start > small { color: var(--muted); font-size: .75rem; line-height: 1.35; }
+.ws .ws-welcome-start:hover { border-color: var(--accent); }
+.ws .ws-welcome-foot { margin-top: .9rem; }
+
+/* Help menu: opens upward from the status bar. */
+.ws-help { position: relative; display: inline-flex; }
+.ws-help-menu { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 50; display: grid; min-width: 15rem; padding: .3rem; background: #fff; border: 1px solid var(--ctl-border); border-radius: 8px; box-shadow: 0 8px 24px rgba(15, 23, 42, .14); }
+.ws .ws-help-menu > button, .ws-help-menu > a { display: flex; align-items: center; gap: .5rem; width: 100%; padding: .35rem .5rem; border: 0; border-radius: 6px; background: none; color: var(--ui-fg); text-align: left; text-decoration: none; font-size: var(--ctl-font); cursor: pointer; }
+.ws .ws-help-menu > button:hover, .ws-help-menu > a:hover, .ws .ws-help-menu > :focus-visible { background: #f1f5f9; outline: none; }
+.ws-help-menu svg { flex: none; color: var(--muted); }
+
+/* Empty bed: a calm card in the middle of the canvas; the canvas around it still takes drops and clicks. */
+.ws .ws-empty-bed { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; gap: .6rem; justify-items: center; padding: 1rem 1.1rem; background: rgba(255, 255, 255, .94); border: 1px solid var(--ctl-border); border-radius: 10px; box-shadow: 0 6px 24px rgba(15, 23, 42, .08); pointer-events: none; width: min(34rem, calc(100% - 1.5rem)); box-sizing: border-box; }
+.ws .ws-empty-bed > p { margin: 0; color: var(--muted); font-size: .8rem; }
+.ws .ws-empty-bed-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 10rem)); justify-content: center; width: 100%; gap: .5rem; pointer-events: auto; }
+.ws .ws-empty-bed-actions > button { display: grid; justify-items: center; gap: .2rem; height: auto; padding: .7rem .5rem; border-radius: 8px; text-align: center; white-space: normal; }
+.ws .ws-empty-bed-actions > button > svg { color: var(--accent); }
+.ws .ws-empty-bed-actions > button > span { font-weight: 600; }
+.ws .ws-empty-bed-actions > button > small { color: var(--muted); font-size: .72rem; line-height: 1.3; }
+.ws .ws-empty-bed-actions > button:hover { border-color: var(--accent); }
+
+/* Getting started checklist (status bar) */
+.ws .ws-first-job-chip { display: inline-flex; align-items: center; gap: .35rem; height: var(--ctl-h-sm); padding: 0 .55rem; border: 1px solid var(--ctl-border); border-radius: 999px; background: #fff; color: var(--ui-fg); font-size: .78rem; cursor: pointer; }
+.ws .ws-first-job-chip:hover, .ws .ws-first-job-chip[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.ws-first-job-menu { min-width: 19rem; max-width: 22rem; padding: .5rem .6rem; }
+.ws-first-job-menu ol { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
+.ws-first-job-menu li { display: grid; grid-template-columns: 16px 1fr; gap: .45rem; align-items: start; color: var(--muted); }
+.ws-first-job-menu li > svg { margin-top: .15rem; }
+.ws-first-job-menu li.done { color: var(--muted); }
+.ws-first-job-menu li.done svg { color: #16a34a; }
+.ws-first-job-menu li.done b { font-weight: 400; text-decoration: line-through; text-decoration-color: rgba(0,0,0,.25); }
+.ws-first-job-menu li.next { color: var(--ui-fg); }
+.ws-first-job-menu li.next > svg { color: var(--accent); }
+.ws-first-job-menu li div { display: grid; gap: .1rem; }
+.ws-first-job-menu li b { font-weight: 500; font-size: .82rem; }
+.ws-first-job-menu li small { font-size: .76rem; line-height: 1.35; color: var(--muted); }
+.ws-first-job-menu .ws-first-job-hide { justify-self: end; margin-top: .4rem; color: var(--muted); }
+
+/* Connection help */
+.ws-conn-help { max-width: 34rem; }
+.ws-conn-likely { display: grid; gap: .25rem; margin: .25rem 0 .75rem; padding: .6rem .75rem; border: 1px solid #fcd34d; border-radius: 8px; background: #fffbeb; }
+.ws-conn-likely p { margin: 0; font-size: .85rem; line-height: 1.4; }
+.ws-conn-likely small { color: var(--muted); font-size: .76rem; }
+.ws-conn-checks { margin: 0 0 .75rem; padding-left: 1.2rem; display: grid; gap: .45rem; font-size: .84rem; line-height: 1.4; }
+.ws-conn-checks li b { display: block; font-weight: 600; }
+.ws-conn-checks li span { color: var(--muted); }
+.ws-conn-help-actions { align-items: center; }
+.ws .ws-units { height: var(--ctl-h-sm); min-width: 2.4rem; padding: 0 .45rem; border: 1px solid var(--ctl-border); border-radius: var(--ctl-radius); background: #fff; color: var(--ui-fg); font-size: .76rem; font-weight: 500; cursor: pointer; }
+.ws .ws-units:hover { border-color: var(--accent); color: var(--accent); }

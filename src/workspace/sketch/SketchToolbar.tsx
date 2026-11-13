@@ -48,13 +48,15 @@ import {
   SkLine,
   SkOffset,
   SkSlot,
+  SketchSheet,
 } from "../../ui/customIcons";
+import { InlineNameField } from "../../ui/InlineName";
 import { IconButton } from "../../ui/icons";
 import { NumberInput } from "../../ui/NumberInput";
 import { notify } from "../../scene/store";
 import { constrainSelected, preview, resetTool, toggleConstruction } from "./controller";
 import { hitBoxes, sketchScreenMat } from "./render";
-import { type Tool, cancelSketch, closeTextEditor, dimensionSuggestions, editingDimension, editingSuggestion, editingText, finishSketch, redoSketch, session, setSketch, setTool, toolOptions, undoSketch, updateText } from "./state";
+import { type Tool, cancelSketch, closeTextEditor, dimensionSuggestions, editingDimension, editingSuggestion, editingText, finishSketch, redoSketch, renameSketch, session, setSketch, setTool, toolOptions, undoSketch, updateText } from "./state";
 import { DEFAULT_FONT, canListLocalFonts, localFontFamilies } from "./fonts";
 
 const TOOLS: { tool: Tool; icon: LucideIcon; label: string }[][] = [
@@ -123,6 +125,23 @@ const CONSTRAINT_NAME: Record<ConstraintType, string> = {
   angle: msg("angle"),
 };
 
+/** The sketch's name; double-click to rename (kept on Finish). */
+function SketchName(props: { name: string }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <span class="ws-sketch-name">
+      <SketchSheet size={16} strokeWidth={1.75} aria-hidden="true" />
+      {editing ? (
+        <InlineNameField value={props.name} label={t("Sketch name")} onCommit={renameSketch} onDone={() => setEditing(false)} />
+      ) : (
+        <b title={t("Double-click to rename")} onDblClick={() => setEditing(true)}>
+          {props.name}
+        </b>
+      )}
+    </span>
+  );
+}
+
 export function SketchToolbar() {
   const s = session.value;
   if (!s) return null;
@@ -133,6 +152,7 @@ export function SketchToolbar() {
     <div class="ws-toolbar ws-sketchbar">
       <IconButton icon={Check} class="ws-primary" label={t("Finish the sketch (keeps your changes as one undo step)")} onClick={() => finishSketch(true)} />
       <IconButton icon={X} label={t("Cancel: discard the changes to this sketch")} onClick={cancelSketch} />
+      <SketchName name={s.name} />
       <span class="ws-sep" />
       <IconButton icon={Undo2} label={t("Sketch undo (⌘Z)")} disabled={!s.undo.length} onClick={() => (undoSketch(), resetTool())} />
       <IconButton icon={Redo2} label={t("Sketch redo (⇧⌘Z)")} disabled={!s.redo.length} onClick={() => (redoSketch(), resetTool())} />

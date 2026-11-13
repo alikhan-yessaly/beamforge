@@ -1,3 +1,4 @@
+import type { Units } from "./units";
 import { t } from "../i18n";
 import type { JobOrder } from "../job/plan";
 import { computed, effect, signal } from "@preact/signals";
@@ -40,6 +41,8 @@ export interface Prefs {
   jobOrder: JobOrder;
   /** Advanced mode: every raw machine and tuning value is shown and editable, plus tuning files. */
   advanced: boolean;
+  /** Units for lengths shown and typed in the interface (default mm). Files and the machine always use mm. */
+  units?: Units;
 }
 
 export const doc = signal<Doc>(migrateDoc(load<Doc>(DOC_KEY, { objects: [], layers: [] })));

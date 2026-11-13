@@ -28,6 +28,7 @@ import {
 } from "../scene/ops";
 import { commit, doc, notify, prefs, profile, redo, selBox, selection, undo } from "../scene/store";
 import { togglePreview } from "./job";
+import { allNames, cleanName, nextNumberedName } from "../scene/names";
 import { isJogKey } from "./keyboardJog";
 import { shortcutsOpen } from "./ShortcutSheet";
 import { sketchKey } from "./sketch/controller";
@@ -59,7 +60,8 @@ function addImported(file: string, out: ImportOutcome): void {
 }
 
 async function importOne(f: File): Promise<void> {
-  const name = f.name.replace(/\.[^.]+$/, "");
+  // A file without a name of its own ("".dxf, a pasted blob) gets the next "Sketch N".
+  const name = cleanName(f.name.replace(/\.[^.]+$/, "")) ?? nextNumberedName(allNames(doc.value.objects), t("Sketch {n}"));
   const lower = f.name.toLowerCase();
   if (lower.endsWith(".dxf")) {
     const { object, warnings } = importDxf(await f.text(), name, profile.value);
@@ -120,6 +122,16 @@ const sel = () => selection.value;
 export const clipboard = signal<readonly SceneObject[]>([]);
 let pasteCount = 0;
 
+/** Object whose name is being edited in the Objects list. */
+export const renaming = signal<string | null>(null);
+/** Bumped to bring the Layers tab (with the Objects list) into view. */
+export const revealObjects = signal(0);
+
+/** Give a top-level object a new name (one undo step). */
+export function renameObject(id: string, name: string): void {
+  commit({ ...doc.value, objects: doc.value.objects.map((o) => (o.id === id ? { ...o, name } : o)) });
+}
+
 export const actions = {
   undo,
   redo,
@@ -135,6 +147,13 @@ export const actions = {
     notify(r.created ? created : mode === "cut" ? t("Moved to the cut layer {color}.", { color: r.color }) : t("Moved to the fill layer {color}.", { color: r.color }));
   },
   delete: () => commit(removeSelected(doc.value, sel())),
+  /** Rename the one selected object in the Objects list (F2, context menu). */
+  rename: () => {
+    const ids = [...selection.value];
+    if (ids.length !== 1 || !doc.value.objects.some((o) => o.id === ids[0])) return;
+    revealObjects.value++;
+    renaming.value = ids[0]!;
+  },
   copy: () => {
     const objects = doc.value.objects.filter((o) => sel().has(o.id));
     if (!objects.length) return;
@@ -240,6 +259,7 @@ export function handleKey(e: KeyboardEvent): void {
   else if (mod && k === "g" && e.shiftKey) actions.ungroup();
   else if (mod && k === "g") actions.group();
   else if (k === "delete" || k === "backspace") actions.delete();
+  else if (!mod && k === "f2") actions.rename();
   else if (k === "escape") {
     if (fillTool.value) stopFillTool();
     else actions.deselect();

@@ -22,16 +22,20 @@ function matches(info: SerialPortInfo, f: PortFilter): boolean {
   return portFilters(f).every((x) => info.usbVendorId === x.usbVendorId && (x.usbProductId === undefined || info.usbProductId === x.usbProductId));
 }
 
+/** An Error carrying a DOMException's name, so callers can tell the reasons apart. */
+const named = (name: string, message: string) => Object.assign(new Error(message), { name });
+
 /** Chrome rejects requestPort() with NotFoundError both when the user cancels and when the browser has no chooser at all. */
 export function explainOpenError(e: unknown): Error {
   const err = e instanceof Error ? e : new Error(String(e));
   if (err.name === "NotFoundError") {
-    return new Error(
+    return named(
+      err.name,
       "No port was chosen. If no port chooser appeared, this browser cannot pick serial ports (embedded previews cannot): open the page in Chrome or Edge.",
     );
   }
-  if (err.name === "InvalidStateError") return new Error("The port is already open (another tab or program is using it). Close it there and retry.");
-  if (err.name === "NetworkError") return new Error("Failed to open the port: it is busy or was unplugged. Close other programs using it (LightBurn, RDWorks) and retry.");
+  if (err.name === "InvalidStateError") return named(err.name, "The port is already open (another tab or program is using it). Close it there and retry.");
+  if (err.name === "NetworkError") return named(err.name, "Failed to open the port: it is busy or was unplugged. Close other programs using it (LightBurn, RDWorks) and retry.");
   return err;
 }
 
@@ -67,7 +71,7 @@ export class WebSerialTransport implements Transport {
    * otherwise shows the chooser, which must happen inside a user gesture.
    */
   async open(): Promise<void> {
-    if (!("serial" in navigator)) throw new Error("Web Serial is not available (use Chrome/Edge on localhost or HTTPS)");
+    if (!("serial" in navigator)) throw named("NotSupportedError", "Web Serial is not available (use Chrome/Edge on localhost or HTTPS)");
     let port: SerialPort | undefined;
     if (!this.forceChooser) {
       const granted = (await navigator.serial.getPorts()).filter((p) => matches(p.getInfo(), this.portFilter));

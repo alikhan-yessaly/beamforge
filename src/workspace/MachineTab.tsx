@@ -11,6 +11,7 @@ import { headPos, linkState, watchHeadPosition } from "../app/connection";
 import { IconButton } from "../ui/icons";
 import { ProfileSection } from "./Panels";
 import { headUm } from "./RunPanel";
+import { More } from "../ui/More";
 
 const ADVANCED_KEY = "ruida-web.machine-advanced.v1";
 const loadAdvanced = () => {
@@ -61,10 +62,12 @@ function TuningSection() {
   return (
     <section class="ws-panel">
       <h3>{t("Tuning")}</h3>
-      <p class="ws-hint">
-        {cls ? t("Untuned values come from the class “{class}”.", { class: t(cls.name) }) : t("Untuned values are generic defaults.")}{" "}
-        {t("Each test card takes about 5 minutes on scrap; all are optional.")}
-      </p>
+      <More id="tuning" summary={t("How tuning works")}>
+        <p>
+          {cls ? t("Untuned values come from the class “{class}”.", { class: t(cls.name) }) : t("Untuned values are generic defaults.")}{" "}
+          {t("Each test card takes about 5 minutes on scrap; all are optional.")}
+        </p>
+      </More>
       <ul class="ws-tune-list">
         {rows.map(([name, done, step]) => (
           <li key={step}>

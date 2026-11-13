@@ -14,6 +14,8 @@ export interface NumberInputProps {
   max?: number;
   /** Decimals shown when not editing (default: up to 2, trailing zeros trimmed). */
   decimals?: number;
+  /** Most decimals shown when `decimals` isn't set (default 2). */
+  maxDecimals?: number;
   disabled?: boolean;
   class?: string;
   /** Called with an error message when the typed text isn't a number in range. */
@@ -46,10 +48,10 @@ export function stepValue(v: number, step: number, dir: 1 | -1, mods: { shift?: 
   return Math.min(max ?? Infinity, Math.max(min ?? -Infinity, rounded));
 }
 
-const show = (v: number | null, decimals?: number) => {
+const show = (v: number | null, decimals?: number, maxDecimals = 2) => {
   if (v === null) return "";
   if (decimals !== undefined) return v.toFixed(decimals);
-  return String(Math.round(v * 100) / 100);
+  return String(Number(v.toFixed(maxDecimals)));
 };
 
 export function NumberInput(p: NumberInputProps) {
@@ -109,7 +111,7 @@ export function NumberInput(p: NumberInputProps) {
       aria-label={p.label}
       title={p.label}
       disabled={p.disabled}
-      value={text ?? show(p.value, p.decimals)}
+      value={text ?? show(p.value, p.decimals, p.maxDecimals)}
       onInput={(e) => setText(e.currentTarget.value)}
       onBlur={() => {
         if (p.commitOnBlur !== false) done();

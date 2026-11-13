@@ -55,7 +55,9 @@ simulator works without a machine.
   from the controller.
 - **Projects:** save and open `.laserproj` files (with the materials they use), export Ruida `.rd` job files, keep a
   material library per machine, and save a machine's tuning as a `.beamtune` file.
-- **Languages:** English, Kazakh and Russian.
+- **First run:** a welcome screen (language, kind of machine, then a sample, an empty bed or the simulator), a
+  "Getting started" checklist up to your first job, connection help, and a notice when a new version is out.
+- **Languages and units:** English, Kazakh and Russian; positions and sizes in mm or inches.
 
 ## Screenshots
 
@@ -72,6 +74,12 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
 
 ### Drawing and sketches
 
+- An empty bed offers three ways in: import a drawing, start a sketch, or open the built-in sample tag.
+- Rename an object by double-clicking its name in the Objects list, with F2, or with right-click → Rename. Double-click
+  the project title to rename the project, or the sketch name in sketch mode. Unnamed sketches become "Sketch 1",
+  "Sketch 2", and so on.
+- The **mm / in** button in the status bar switches positions, sizes, rulers and snap steps to inches. Files, layer
+  settings and the machine always use millimetres.
 - Import DXF files, or drop them on the canvas. Supported entities: LINE, LWPOLYLINE (with arcs), POLYLINE, ARC,
   CIRCLE, ELLIPSE, SPLINE, INSERT/blocks and SOLID. Text, hatches and dimensions are skipped with a warning.
   Units come from `$INSUNITS`; drawings without units are read as millimetres.
@@ -192,6 +200,9 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
 - Jobs are checked against the controller's bed before they are sent.
 - Memory-write commands are only available in an opt-in developer mode.
 - Moves such as Go to are split into short segments, so Stop takes effect quickly.
+- **Help → Connection help** (also offered when connecting fails) explains the likely cause and walks through power,
+  cable, driver, other programs holding the port, and the browser. Browsers without Web Serial get a notice and can
+  still use the simulator.
 
 ### Command line
 
@@ -272,7 +283,8 @@ tests/           Unit tests (Vitest), including byte-for-byte checks against Lig
 Please report bugs and hardware compatibility results in the repository's
 issue tracker. Remove personal data and machine identifiers from logs before
 sharing. Describe your controller model, browser, steps to reproduce, and
-whether you used the simulator or real hardware.
+whether you used the simulator or real hardware. **Help → Copy diagnostics** copies the app version, browser,
+connection state, machine settings and recent errors (not your drawing or machine name) to paste into a report.
 
 Use a branch and open a pull request for proposed changes.
 

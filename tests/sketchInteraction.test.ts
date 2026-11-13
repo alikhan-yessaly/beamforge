@@ -29,6 +29,7 @@ function setupSketch() {
   session.value = {
     objectId: "test",
     name: "Test",
+    originalName: "Test",
     mat: [1, 0, 0, 1, 0, 0],
     original: sketch,
     sketch,
@@ -216,6 +217,7 @@ describe("sketch tool selection", () => {
     session.value = {
       objectId: "test",
       name: "Test",
+      originalName: "Test",
       mat: [1, 0, 0, 1, 0, 0],
       original: emptySketch(),
       sketch: emptySketch(),

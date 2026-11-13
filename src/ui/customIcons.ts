@@ -10,6 +10,13 @@ export const LaserCutter = createLucideIcon("laser-cutter", [
   ["path", { d: "M6 17h12", key: "bed" }],
 ]);
 
+/** A sketch: a sheet of drawing paper with faint gridlines and a pen across its corner. */
+export const SketchSheet = createLucideIcon("sketch-sheet", [
+  ["path", { d: "M12 21H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6", key: "sheet" }],
+  ["path", { d: "M8 2v19M13 2v8M3 8h14M3 14h9", "stroke-width": "1", "stroke-opacity": "0.5", key: "grid" }],
+  ["path", { d: "M20.4 11.6a1.6 1.6 0 0 1 2.3 2.3L16.2 20.4l-3.2.9.9-3.2z", key: "pen" }],
+]);
+
 /** Zoom to the bed: the slatted bed inside outward corner brackets. */
 export const FitBed = createLucideIcon("fit-bed", [
   ["path", { d: "M3 7V5a2 2 0 0 1 2-2h2", key: "c1" }],

@@ -21,6 +21,7 @@ const GROUPS: [string, [string, string][]][] = [
       [`${M}D`, msg("Duplicate")],
       [`${M}A`, msg("Select all")],
       ["⌫", msg("Delete")],
+      ["F2", msg("Rename")],
       ["Esc", msg("Deselect")],
       [`${M}G / ${S}${M}G`, msg("Group / ungroup")],
       [msg("Arrows"), msg("Nudge 1 mm (Shift 10 mm, Alt 0.1 mm)")],

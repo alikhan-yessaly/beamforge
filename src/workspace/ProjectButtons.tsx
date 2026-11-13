@@ -3,7 +3,8 @@ import { t } from "../i18n";
 import { ChevronDown, FilePlus, FolderOpen, Save } from "lucide-preact";
 import { SaveAs } from "../ui/customIcons";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { dirty, newProject, openProject, openRecent, project, recentFiles, saveProject, saveProjectAs } from "../project/state";
+import { InlineNameField } from "../ui/InlineName";
+import { dirty, newProject, renameProject, openProject, openRecent, project, recentFiles, saveProject, saveProjectAs } from "../project/state";
 import { IconButton } from "../ui/icons";
 
 export function ProjectButtons() {
@@ -22,7 +23,9 @@ export function ProjectButtons() {
   }, [open]);
   const recent = recentFiles.value;
   const hasFile = project.value.handle !== null;
-  const fileName = `${project.value.name}.laserproj`;
+  const [editingName, setEditingName] = useState(false);
+  const fileName = project.value.handle?.name ?? `${project.value.name}.laserproj`;
+  const shownName = project.value.name === "Untitled" ? t("Untitled") : project.value.name;
   return (
     <>
       <IconButton icon={FilePlus} label={t("New project")} onClick={newProject} />
@@ -64,14 +67,19 @@ export function ProjectButtons() {
         onClick={() => void saveProject()}
       />
       <IconButton icon={SaveAs} label={t("Save As… — save the project to a new .laserproj file (⇧⌘S)")} onClick={() => void saveProjectAs()} />
+      {editingName ? (
+        <InlineNameField class="ws-project-name-field" value={shownName} label={t("Project name")} onCommit={renameProject} onDone={() => setEditingName(false)} />
+      ) : (
       <span
         class={`ws-project-name${dirty.value ? " dirty" : ""}`}
-        title={`${hasFile ? t("Project file: {file}", { file: fileName }) : t("Not saved to a file yet (use Save As…)")}${dirty.value ? ` · ${t("unsaved changes")}` : ""}. ${t("Your work is also autosaved in this browser, so a reload keeps it.")}`}
+        title={`${hasFile ? t("Project file: {file}", { file: fileName }) : t("Not saved to a file yet (use Save As…)")}${dirty.value ? ` · ${t("unsaved changes")}` : ""}. ${t("Your work is also autosaved in this browser, so a reload keeps it.")} ${t("Double-click to rename.")}`}
+        onDblClick={() => setEditingName(true)}
       >
-        {project.value.name === "Untitled" ? t("Untitled") : project.value.name}
-        {hasFile ? <small>{t(".laserproj")}</small> : <small>{" "}{t("· not saved to a file")}</small>}
+        {shownName}
+        {hasFile ? <small>{fileName === `${project.value.name}.laserproj` ? t(".laserproj") : ` · ${fileName}`}</small> : <small>{" "}{t("· not saved to a file")}</small>}
         {dirty.value && hasFile && <i aria-label={t("unsaved changes")} />}
       </span>
+      )}
     </>
   );
 }

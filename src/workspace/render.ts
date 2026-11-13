@@ -8,6 +8,7 @@ import { regionRings } from "../job/regions";
 import { t } from "../i18n";
 import { type View, toScreen } from "./view";
 import { signal } from "@preact/signals";
+import { type Units, formatLength, gridSteps } from "../scene/units";
 
 /** Bumped when an imported picture finishes decoding, so the canvas redraws with it. */
 export const imagesVersion = signal(0);
@@ -40,6 +41,8 @@ export interface Overlay {
   projectedHead?: Vec | null;
   /** Fill tool: the region under the cursor (bed mm rings, even-odd) and the colour it would get. */
   fillHover?: { rings: Vec[][]; color: string } | null;
+  /** Units for the ruler labels (default mm). */
+  units?: Units;
 }
 
 function traceRing(ctx: CanvasRenderingContext2D, m: Mat, ring: Vec[]): void {
@@ -64,16 +67,6 @@ export function layerStrokeStyle(layer: Pick<Layer, "show" | "output"> | undefin
 
 const css = (name: string, fallback: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-
-/** Grid steps (mm) for the current zoom: minor lines >= 7 px apart. */
-export function gridSteps(zoom: number): { minor: number; major: number } {
-  for (const [minor, major] of [[1, 10], [5, 50], [10, 100], [50, 500], [100, 1000]] as const) {
-    if (minor * zoom >= 7) return { minor, major };
-  }
-  let minor = 500;
-  while (minor * zoom < 7) minor *= 10;
-  return { minor, major: minor * 10 };
-}
 
 /** The 8 scale handles as fractions of the box (x, y) in internal orientation, plus the rotate handle. */
 export const HANDLES: [number, number][] = [
@@ -104,7 +97,8 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: n
 
   const flipX = p.origin.endsWith("right");
   const flipY = p.origin.startsWith("bottom");
-  const { minor, major } = gridSteps(v.zoom);
+  const units = ov.units ?? "mm";
+  const { minor, major } = gridSteps(v.zoom, units);
   ctx.lineWidth = 1;
   ctx.font = "11px system-ui, sans-serif";
 
@@ -147,13 +141,13 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: n
   ctx.textBaseline = "bottom";
   for (let u = 0; u <= p.bedW + 1e-9; u += major) {
     const x = toScreen(v, { x: flipX ? p.bedW - u : u, y: 0 }).x;
-    ctx.fillText(String(u), x, b0.y - 4);
+    ctx.fillText(formatLength(u, units), x, b0.y - 4);
   }
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
   for (let u = 0; u <= p.bedH + 1e-9; u += major) {
     const y = toScreen(v, { x: 0, y: flipY ? p.bedH - u : u }).y;
-    ctx.fillText(String(u), b0.x - 5, y);
+    ctx.fillText(formatLength(u, units), b0.x - 5, y);
   }
 
   // Origin marker.
@@ -356,9 +350,9 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: n
 }
 
 /** Format an internal point in user (machine-origin) coordinates. */
-export function formatUser(p: MachineProfile, pt: Vec): string {
+export function formatUser(p: MachineProfile, pt: Vec, units: Units = "mm"): string {
   const u = toUser(p, pt);
-  return `X ${u.x.toFixed(2)}  Y ${u.y.toFixed(2)} mm`;
+  return `X ${formatLength(u.x, units, true)}  Y ${formatLength(u.y, units, true)} ${units}`;
 }
 
 /** Index of the first segment that ends after time t (binary search over the estimate's end times). */

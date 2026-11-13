@@ -2,9 +2,9 @@ import { ExportDesign } from "../ui/customIcons";
 import { openExport } from "./ExportDialog";
 import { t } from "../i18n";
 import { signal } from "@preact/signals";
-import { ModeCut, ModeFill } from "../ui/customIcons";
+import { ModeCut, ModeFill, SketchSheet } from "../ui/customIcons";
 import { editSketch } from "./sketch/state";
-import { PenTool, ClipboardPaste, Copy, CopyPlus, Group, Scissors, Trash2, Ungroup } from "lucide-preact";
+import { PencilLine, ClipboardPaste, Copy, CopyPlus, Group, Scissors, Trash2, Ungroup } from "lucide-preact";
 import { useEffect, useRef } from "preact/hooks";
 import { doc, selection } from "../scene/store";
 import { actions, clipboard } from "./actions";
@@ -37,12 +37,13 @@ export function ContextMenu() {
   const selected = doc.value.objects.filter((o) => selection.value.has(o.id));
   const items = [
     {
-      icon: PenTool,
+      icon: SketchSheet,
       label: selected.length === 1 && !selected[0]!.sketch ? t("Edit as sketch") : t("Edit sketch"),
       shortcut: t("double-click"),
       enabled: selected.length === 1 && (!!selected[0]!.sketch || (!selected[0]!.children?.length && selected[0]!.paths.length > 0)),
       action: () => void editSketch(selected[0]!),
     },
+    { icon: PencilLine, label: t("Rename"), shortcut: "F2", enabled: selected.length === 1, action: actions.rename },
     { icon: Scissors, label: t("Cut"), shortcut: "⌘/Ctrl X", enabled: selected.length > 0, action: actions.cut },
     { icon: Copy, label: t("Copy"), shortcut: "⌘/Ctrl C", enabled: selected.length > 0, action: actions.copy },
     { icon: ClipboardPaste, label: t("Paste"), shortcut: "⌘/Ctrl V", enabled: clipboard.value.length > 0, action: actions.paste },

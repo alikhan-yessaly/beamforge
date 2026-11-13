@@ -7,7 +7,10 @@ import { linkState, runner } from "../app/connection";
 import "../ui/app.css";
 import { LaserCutter } from "../ui/customIcons";
 import { IconButton } from "../ui/icons";
-import { handleKey } from "./actions";
+import { handleKey, revealObjects } from "./actions";
+import { Notices } from "./Notices";
+import { ConnectionHelp } from "./ConnectionHelp";
+import { WelcomeDialog } from "./WelcomeDialog";
 import { installKeyboardJog } from "./keyboardJog";
 import { Canvas } from "./Canvas";
 import { LayersPanel } from "./LayersPanel";
@@ -43,6 +46,11 @@ function App() {
   const device = appMode.value === "device";
   useEffect(() => setTab((current) => (device ? (current === "machine" ? current : "job") : current === "job" ? "layers" : current)), [device]);
   const [sidebar, setSidebar] = useState(true);
+  useEffect(() => {
+    if (!revealObjects.value) return;
+    setSidebar(true);
+    setTab("layers");
+  }, [revealObjects.value]);
   const stop = useRef<HTMLDivElement>(null);
   const [machineContent] = useState(() => document.getElementById("machine-content"));
   const sketching = sketchSession.value !== null;
@@ -62,6 +70,7 @@ function App() {
           {" "}<a href="https://github.com/alikhan-yessaly/beamforge#safety-and-limitations" target="_blank" rel="noopener noreferrer">{t("Safety and limitations")}</a>
         </div>
       )}
+      {!sketching && <Notices />}
       <div class={`ws-top${sketching && connected && !running ? " ws-sketch-stop-space" : ""}`}>
         {!sketching && <ModeSwitch />}
         {sketching ? <SketchToolbar /> : device ? <span class="ws-device-title">{t("Device: a read-only preview of the prepared job")}</span> : <Toolbar />}
@@ -114,6 +123,8 @@ function App() {
       <ShortcutSheet />
       <TuningDialog />
       <MachineDialog />
+      <WelcomeDialog />
+      <ConnectionHelp />
     </div>
   );
 }

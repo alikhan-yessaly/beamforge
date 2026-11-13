@@ -8,6 +8,7 @@ import { jobEstimate, preview, toolpath } from "./job";
 import { stopFillTool } from "./fillTool";
 import { framing } from "./RunPanel";
 import { session as sketchSession } from "./sketch/state";
+import { markStep } from "./firstJobState";
 
 export type AppMode = "prepare" | "device";
 export const appMode = signal<AppMode>("prepare");
@@ -36,6 +37,7 @@ export function enterDevice(): void {
   selection.value = new Set();
   preview.value = { on: true, t: Infinity };
   appMode.value = "device";
+  markStep("prepare");
 }
 
 /** Back to editing. Not while the machine is working on this job. */

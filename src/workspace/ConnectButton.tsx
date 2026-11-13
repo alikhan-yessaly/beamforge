@@ -9,6 +9,7 @@ import {
   connBusy,
   connKind,
   connMessage,
+  connProblem,
   connectAndVerify,
   disconnectMachine,
   headPos,
@@ -17,6 +18,7 @@ import {
   watchHeadPosition,
 } from "../app/connection";
 import { IconButton } from "../ui/icons";
+import { connHelpOpen } from "./ConnectionHelp";
 
 const KINDS: { kind: ConnKind; icon: typeof Usb; label: string }[] = [
   { kind: "usb", icon: Usb, label: msg("USB (Chrome or Edge)") },
@@ -73,7 +75,7 @@ export function ConnectButton() {
           class={`ws-machine-status ${state}`}
           label={connected ? t("Machine: {state}", { state: machineText() }) : t("Connect to the machine ({kind}); Card ID is checked automatically", { kind: t(KINDS.find((k) => k.kind === connKind.value)?.label ?? "") })}
           disabled={connBusy.value}
-          onClick={() => (connected ? setOpen(!open) : void connectAndVerify())}
+          onClick={() => (connected ? setOpen(!open) : void connectAndVerify().then((ok) => !ok && connProblem.value && setOpen(true)))}
         />
         <IconButton icon={ChevronDown} class="ws-split-more" label={t("Connection options")} pressed={open} onClick={() => setOpen(!open)} />
       </div>
@@ -120,6 +122,11 @@ export function ConnectButton() {
             )}
           </dl>
           {connMessage.value && <p class="ws-hint">{connMessage.value}</p>}
+          {connProblem.value && !connected && (
+            <button type="button" class="ws-link-btn" onClick={() => ((connHelpOpen.value = true), setOpen(false))}>
+              {t("Can't connect? Step-by-step help")}
+            </button>
+          )}
           <div class="ws-row">
             {connected ? (
               <IconButton icon={Unplug} label={t("Disconnect")} onClick={() => void disconnectMachine()} />

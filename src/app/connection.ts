@@ -1,4 +1,5 @@
 // The one connection the page uses, shared by the machine panel (src/main.ts) and the workspace (Preact).
+import { type ConnProblem, classifyConnError } from "./troubleshoot";
 import { t } from "../i18n";
 import { signal } from "@preact/signals";
 import { JobRunner } from "../controller/jobRunner";
@@ -86,6 +87,8 @@ export function selectConnKind(kind: ConnKind): void {
 /** Human-readable result of the last connection action, and whether one is in progress. */
 export const connMessage = signal("");
 export const connBusy = signal(false);
+/** Why the last connect attempt failed (null after a success, or before any attempt). */
+export const connProblem = signal<ConnProblem | null>(null);
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -102,12 +105,15 @@ export async function connectAndVerify(opts: { chooser?: boolean } = {}): Promis
     const where = transport.kind === "sim" ? t("the simulator") : transport.kind === "bridge" ? t("the bridge ({port})", { port: bridge.portName ?? "" }) : "USB";
     const id = await link.verify();
     if (id === null) {
+      connProblem.value = "no-answer";
       connMessage.value = t("Connected to {where}, but the Card ID did not decode. Check the controller model (Machine tab, developer mode), cable and power.", { where });
       return false;
     }
+    connProblem.value = null;
     connMessage.value = t("Connected to {where}; Card ID {id} verified.", { where, id: `0x${id.toString(16)}` });
     return true;
   } catch (e) {
+    connProblem.value = classifyConnError(e, transport.kind);
     connMessage.value = t("Could not connect: {error}", { error: errText(e) });
     return false;
   } finally {

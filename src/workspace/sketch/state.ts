@@ -1,6 +1,7 @@
 // Sketch mode: the sketch being edited, its own undo/redo, the active tool and selection, and the solver status.
 // Finishing writes the sketch (and the paths generated from it) back to its object as one project undo step.
 import { t, tp } from "../../i18n";
+import { allNames, nextNumberedName } from "../../scene/names";
 import { signal } from "@preact/signals";
 import wasmUrl from "@salusoft89/planegcs/dist/planegcs_dist/planegcs.wasm?url";
 import { type Mat, apply, translate } from "../../geom/geom";
@@ -49,6 +50,8 @@ export interface SketchSession {
   /** Object being edited; null for a new sketch not yet in the document. */
   objectId: string | null;
   name: string;
+  /** Name when the session opened, so a rename alone still counts as a change. */
+  originalName: string;
   mat: Mat;
   original: Sketch;
   sketch: Sketch;
@@ -99,13 +102,19 @@ async function open(objectId: string | null, name: string, mat: Mat, sketch: Ske
   const corners = [apply(mat, { x: local.minX, y: local.minY }), apply(mat, { x: local.maxX, y: local.maxY }), apply(mat, { x: local.minX, y: local.maxY }), apply(mat, { x: local.maxX, y: local.minY })];
   view.value = fitBox({ minX: Math.min(...corners.map((c) => c.x)), minY: Math.min(...corners.map((c) => c.y)), maxX: Math.max(...corners.map((c) => c.x)), maxY: Math.max(...corners.map((c) => c.y)) });
   viewTouched.value = true;
-  session.value = { objectId, name, mat, original: sketch, sketch: a.sketch, undo: [], redo: [], tool: "select", construction: false, selected: new Set(), status: a.status };
+  session.value = { objectId, name, originalName: name, mat, original: sketch, sketch: a.sketch, undo: [], redo: [], tool: "select", construction: false, selected: new Set(), status: a.status };
 }
 
 /** Start a new sketch with its origin at the centre of the bed. */
 export function newSketch(): Promise<void> {
   const p = profile.value;
-  return open(null, t("Sketch"), translate(p.bedW / 2, p.bedH / 2), emptySketch());
+  return open(null, nextNumberedName(allNames(doc.value.objects), t("Sketch {n}")), translate(p.bedW / 2, p.bedH / 2), emptySketch());
+}
+
+/** Rename the sketch being edited; it is written to the object on Finish. */
+export function renameSketch(name: string): void {
+  const s = session.value;
+  if (s) session.value = { ...s, name };
 }
 
 export function editSketch(o: SceneObject): Promise<void> {
@@ -195,7 +204,13 @@ export function finishSketch(keep: boolean): void {
   editingSuggestion.value = null;
   editingText.value = null;
   session.value = null;
-  if (!keep || s.sketch === s.original) return;
+  const renamed = s.name !== s.originalName;
+  if (!keep || (s.sketch === s.original && !renamed)) return;
+  if (s.sketch === s.original && s.objectId !== null) {
+    commit({ ...doc.value, objects: doc.value.objects.map((o) => (o.id === s.objectId ? { ...o, name: s.name } : o)) });
+    selection.value = new Set([s.objectId]);
+    return;
+  }
   const paths = sketchPaths(s.sketch);
   if (s.objectId === null) {
     if (s.sketch.entities.length === 0) return;
@@ -203,7 +218,7 @@ export function finishSketch(keep: boolean): void {
     commit({ ...doc.value, objects: [...doc.value.objects, obj] });
     selection.value = new Set([obj.id]);
   } else {
-    commit({ ...doc.value, objects: doc.value.objects.map((o) => (o.id === s.objectId ? { ...o, sketch: s.sketch, paths } : o)) });
+    commit({ ...doc.value, objects: doc.value.objects.map((o) => (o.id === s.objectId ? { ...o, name: s.name, sketch: s.sketch, paths } : o)) });
     selection.value = new Set([s.objectId]);
   }
 }
@@ -212,11 +227,11 @@ export function finishSketch(keep: boolean): void {
 export function cancelSketch(): void {
   const s = session.value;
   if (!s) return;
-  if (s.sketch !== s.original && !window.confirm(t("Discard the changes to this sketch?"))) return;
+  if ((s.sketch !== s.original || s.name !== s.originalName) && !window.confirm(t("Discard the changes to this sketch?"))) return;
   finishSketch(false);
 }
 
-export const hasChanges = () => !!session.value && session.value.sketch !== session.value.original;
+export const hasChanges = () => !!session.value && (session.value.sketch !== session.value.original || session.value.name !== session.value.originalName);
 
 /** End a drag: keep `final`, with one undo step back to `base` (the sketch before the drag). */
 export function commitDrag(base: Sketch, final: Sketch): void {

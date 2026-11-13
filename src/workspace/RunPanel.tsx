@@ -16,6 +16,7 @@ import { doc, notify, prefs, profile } from "../scene/store";
 import { jobEstimate, preview, togglePreview, toolpath } from "./job";
 import { confirmStart } from "./StartDialog";
 import { savingToMachine } from "./mode";
+import { markStep } from "./firstJobState";
 
 /** Latest job progress (null before the first run). */
 export const runProgress = signal<JobProgress | null>(null);
@@ -42,6 +43,7 @@ async function frame(): Promise<void> {
     await frameJob(motion, inspectJob(job.commands), speed, (p) => (headUm.value = p), (start) => {
       relativePlacement.value = job.mode === "current" ? { start, designOrigin: job.designOrigin } : null;
     });
+    markStep("frame");
   } catch (e) {
     if (!(e instanceof StoppedError)) notify(t("Frame: {error}", { error: errText(e) }), "error");
   } finally {
@@ -74,6 +76,7 @@ async function start(): Promise<void> {
     warnings,
   });
   if (!ok) return;
+  markStep("start");
   try {
     const end = await runner.run(job.commands, (p) => {
       if (job.mode === "current" && p.phase === "sending" && p.pos) {

@@ -10,6 +10,7 @@ import { type OpenedFile, type RecentFile, canSaveInPlace, loadCurrentHandle, lo
 import { type ProjectJob, compareMaterials, parseProject, projectName, serializeProject } from "./format";
 import { presetSettings, presets, savePresets } from "../workspace/materials";
 import { updateLayer } from "../job/layers";
+import { sampleDoc } from "./sample";
 
 const KEY = "ruida-web.project.v1";
 
@@ -29,7 +30,7 @@ const jobNow = (): ProjectJob => ({ startFrom: prefs.value.startFrom, innerFirst
 
 const stored = (() => {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "null") as { name: string; dirty: boolean } | null;
+    return JSON.parse(localStorage.getItem(KEY) ?? "null") as { name: string; dirty: boolean; file?: string } | null;
   } catch {
     return null;
   }
@@ -46,7 +47,8 @@ export const project = signal<ProjectState>({
 // Only after that may the stored handle be overwritten, or startup would erase it before reading it.
 const restored = signal(false);
 void loadCurrentHandle().then((h) => {
-  if (h && projectName(h.name) === project.peek().name && !project.peek().handle) project.value = { ...project.peek(), handle: h };
+  const same = h && (stored?.file ? h.name === stored.file : projectName(h.name) === project.peek().name);
+  if (h && same && !project.peek().handle) project.value = { ...project.peek(), handle: h };
   restored.value = true;
 });
 effect(() => {
@@ -68,11 +70,16 @@ export const dirty = computed(() => {
 effect(() => {
   document.title = `${dirty.value ? "• " : ""}${project.value.name} – BeamForge Beta`;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ name: project.value.name, dirty: dirty.value }));
+    localStorage.setItem(KEY, JSON.stringify({ name: project.value.name, dirty: dirty.value, file: project.value.handle?.name }));
   } catch {
     /* best effort */
   }
 });
+
+/** Give the project a new name. Save keeps writing to its file; Save As suggests the new name. */
+export function renameProject(name: string): void {
+  project.value = { ...project.value, name };
+}
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -85,6 +92,15 @@ export function newProject(): void {
   if (!okToDiscard(t("Start a new project"))) return;
   resetDoc({ objects: [], layers: [] });
   project.value = { name: "Untitled", handle: null, saved: null };
+}
+
+/** Open the built-in sample (a tag to cut, with an engraved star) as a new, unsaved project. */
+export function openSample(): boolean {
+  if (!okToDiscard(t("Open the sample"))) return false;
+  const name = t("Sample tag");
+  resetDoc(sampleDoc(profile.value, name));
+  project.value = { name, handle: null, saved: null };
+  return true;
 }
 
 function load(f: OpenedFile): void {

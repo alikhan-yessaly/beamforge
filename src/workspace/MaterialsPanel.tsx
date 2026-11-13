@@ -12,6 +12,7 @@ import { IconButton } from "../ui/icons";
 import { type MaterialPreset, OP_NAME, powerText, presets, presetsError, presetsFor, savePresets, seedPresets, validPreset } from "./materials";
 import { PowerRamp, PowerRow } from "./PowerRow";
 import { openTuning } from "./TuningDialog";
+import { More } from "../ui/More";
 
 const FIELDS = [
   { key: "speed", icon: Gauge, label: msg("Speed"), unit: "mm/s" },
@@ -133,7 +134,9 @@ export function MaterialsPanel() {
         <IconButton icon={Plus} label={t("New preset")} disabled={!!presetsError.value || !!editing} onClick={() => setEditing(blank())} />
       </div>
       {presetsError.value && <p class="warn" role="alert">{presetsError.value}</p>}
-      <p class="ws-hint">{t("Presets for “{machine}”. Choose one on a layer in the Layers tab to fill in its settings. They are starting points: test each material on your machine.", { machine: machine.name })}</p>
+      <More id="presets" summary={t("How presets work")}>
+        <p>{t("Presets for “{machine}”. Choose one on a layer in the Layers tab to fill in its settings. They are starting points: test each material on your machine.", { machine: machine.name })}</p>
+      </More>
       <ul class="ws-presets">
         {editing && !list.some((p) => p.id === editing.id) && <Editor draft={editing} onDone={() => setEditing(null)} />}
         {[...groups.entries()].map(([material, ps]) =>
