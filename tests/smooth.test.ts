@@ -166,3 +166,18 @@ describe("outline smoothing", () => {
     expect(simplify([{ x: 0, y: 0 }, { x: 1, y: 0.001 }, { x: 2, y: 0 }, { x: 3, y: 5 }], 0.01)).toEqual([{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 5 }]);
   });
 });
+
+describe("smoothing odd coordinates", () => {
+  it("leaves paths with huge coordinates alone instead of running out of memory", () => {
+    const pts: Vec[] = [{ x: 0, y: 0 }, { x: 1e308, y: 1e308 }, { x: -1e308, y: 0 }];
+    expect(smoothPath(pts, true, { scale: 0.25 })).toEqual(pts);
+    expect(() => smoothPath(pts.map((p) => ({ x: p.x / 10, y: p.y / 10 })), true, { scale: 0.25 })).not.toThrow();
+  });
+
+  it("caps the samples on a very long path", () => {
+    const pts: Vec[] = Array.from({ length: 50 }, (_, i) => ({ x: i * 1e5, y: (i % 2) * 1e5 }));
+    const out = smoothPath(pts, false, { scale: 0.05 })!;
+    expect(out.length).toBeGreaterThan(1);
+    expect(out.length).toBeLessThan(200_001);
+  });
+});

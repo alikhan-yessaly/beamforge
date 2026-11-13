@@ -23,3 +23,9 @@ describe("units", () => {
     expect(g.major / 25.4).toBeCloseTo(1);
   });
 });
+
+describe("grid steps for odd zoom values", () => {
+  it("returns instead of looping forever on a zero, negative or NaN zoom", () => {
+    for (const z of [0, -1, NaN]) expect(Number.isFinite(gridSteps(z).minor)).toBe(true);
+  });
+});

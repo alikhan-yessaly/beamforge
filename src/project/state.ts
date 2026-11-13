@@ -143,6 +143,16 @@ export async function openProject(): Promise<void> {
   }
 }
 
+/** Open a project file that was dropped or pasted (no file handle: Save asks where). */
+export async function openProjectFile(f: File): Promise<void> {
+  if (!okToDiscard(t("Open another project"))) return;
+  try {
+    load({ name: f.name, text: await f.text(), handle: null });
+  } catch (e) {
+    notify(t("Could not open the project: {error}", { error: errText(e) }), "error");
+  }
+}
+
 export async function openRecent(r: RecentFile): Promise<void> {
   if (!okToDiscard(t("Open another project"))) return;
   try {

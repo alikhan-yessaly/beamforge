@@ -1077,4 +1077,5 @@ export const kk: Dictionary = {
   "Suggested versions": "Ұсынылған нұсқалар",
   "The design is too big to keep in the browser between visits. Save it as a project file.": "Сурет браузерде сеанстар арасында сақтау үшін тым үлкен. Оны жоба файлы ретінде сақтаңыз.",
   "Finish or cancel the sketch before importing.": "Импорттау алдында эскизді аяқтаңыз немесе болдырмаңыз.",
+  "The file has no shapes to import.": "Файлда импорттайтын пішіндер жоқ.",
 };

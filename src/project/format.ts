@@ -1,7 +1,7 @@
 // `.laserproj` project files: the drawing, layers and job options in machine-neutral units (mm, mm/s, %), plus a
 // separate, informational `machine` entry, so a future driver for another laser can open the same file.
 import { t } from "../i18n";
-import type { Doc, Layer, SceneObject, ScenePath } from "../scene/model";
+import { type Doc, type Layer, type SceneObject, type ScenePath, newId } from "../scene/model";
 import { migrateDoc } from "../job/layers";
 import type { JobOrder } from "../job/plan";
 import { type MaterialPreset, validPreset } from "../machine/presets";
@@ -81,7 +81,26 @@ function checkLayer(l: unknown): Layer {
   if (!isObj(l) || !isStr(l.color) || !isNum(l.speed) || !isNum(l.minPower) || !isNum(l.maxPower) || !isNum(l.passes) || typeof l.output !== "boolean") {
     throw new ProjectError(t("Invalid layer settings"));
   }
-  return l as unknown as Layer;
+  // Values the layer fields could never produce (a hand-edited or foreign file) are brought into their ranges, so a
+  // file can't plan a job at speed 0, with fractional passes or a fill with no spacing.
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  const minPower = clamp(l.minPower, 0, 100);
+  const out = { ...l, speed: clamp(l.speed, 0.1, 10_000), minPower, maxPower: clamp(l.maxPower, minPower, 100), passes: clamp(Math.round(l.passes), 1, 99) } as Record<string, unknown>;
+  if (out.kerf !== undefined) out.kerf = isNum(out.kerf) ? clamp(out.kerf, 0, 2) : undefined;
+  if (out.fill !== undefined) {
+    const f = out.fill;
+    out.fill = isObj(f) && isNum(f.interval) && isNum(f.angle) ? { ...f, interval: clamp(f.interval, 0.01, 50) } : undefined;
+  }
+  return out as unknown as Layer;
+}
+
+/** Give repeated object ids (at any group level) fresh ones: selection and editing go by id. */
+function uniqueIds(objects: SceneObject[], seen = new Set<string>()): SceneObject[] {
+  return objects.map((o) => {
+    const id = seen.has(o.id) ? newId() : o.id;
+    seen.add(id);
+    return { ...o, id, ...(o.children ? { children: uniqueIds(o.children, seen) } : {}) };
+  });
 }
 
 /** Parse and validate a project file. Throws an Error with a readable message. */
@@ -96,7 +115,7 @@ export function parseProject(text: string): ProjectFile {
   if (!isNum(raw.version) || raw.version < 1) throw new ProjectError(t("Unknown project file version"));
   if (raw.version > PROJECT_VERSION) throw new ProjectError(t("This project was saved by a newer version of the app (format {v}); update the app to open it", { v: raw.version }));
   if (!isObj(raw.doc) || !Array.isArray(raw.doc.objects)) throw new ProjectError(t("The project has no drawing"));
-  const objects = raw.doc.objects.map((o) => checkObject(o));
+  const objects = uniqueIds(raw.doc.objects.map((o) => checkObject(o)));
   const layers = Array.isArray(raw.doc.layers) ? raw.doc.layers.map(checkLayer) : [];
   const job = isObj(raw.job) ? raw.job : {};
   const machine = isObj(raw.machine) ? raw.machine : {};

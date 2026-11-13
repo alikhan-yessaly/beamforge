@@ -79,6 +79,41 @@ export function fillHoles(bits: Uint8Array, w: number, h: number): Uint8Array {
 }
 
 /** A copy with `pad` empty pixels added on every side. */
+/** A copy without the 8-connected blobs of at most `maxArea` pixels (the specks the trace drops). */
+export function dropSpecks(bits: Uint8Array, w: number, h: number, maxArea: number): Uint8Array {
+  const out = bits.slice();
+  if (maxArea < 1) return out;
+  const seen = new Uint8Array(w * h);
+  const stack: number[] = [];
+  const blob: number[] = [];
+  for (let s = 0; s < w * h; s++) {
+    if (!bits[s] || seen[s]) continue;
+    seen[s] = 1;
+    stack.push(s);
+    blob.length = 0;
+    while (stack.length) {
+      const i = stack.pop();
+      blob.push(i);
+      const x = i % w, y = (i / w) | 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= h) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= w) continue;
+          const j = yy * w + xx;
+          if (bits[j] && !seen[j]) {
+            seen[j] = 1;
+            stack.push(j);
+          }
+        }
+      }
+    }
+    if (blob.length <= maxArea) for (const i of blob) out[i] = 0;
+  }
+  return out;
+}
+
 export function pad(bits: Uint8Array, w: number, h: number, p: number): { bits: Uint8Array; w: number; h: number } {
   const W = w + 2 * p, H = h + 2 * p;
   const out = new Uint8Array(W * H);

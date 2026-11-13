@@ -155,3 +155,37 @@ describe("traceImage with the automatic options", () => {
     expect(r.paths[0]!.fill).toBeNull();
   });
 });
+
+describe("edge cases", () => {
+  it("draws a wide sticker margin on a finely sampled picture without a giant mask", () => {
+    const img = rgba(400, 400, (x, y) => (x > 100 && x < 300 && y > 100 && y < 300 ? BLACK : WHITE));
+    // 0.005 mm per px with a 20 mm margin is 4000 px of margin.
+    const r = traceImage(img, { ...DEFAULT_TRACE, sticker: true, stickerMarginMm: 20, mmPerPx: 0.005 });
+    const cut = r.paths.filter((p) => p.stroke === STICKER_COLOR);
+    expect(cut).toHaveLength(1);
+    const xs = cut[0]!.points.map((p) => p.x);
+    expect(Math.min(...xs)).toBeLessThan(0.5 - 18);
+    expect(Math.min(...xs)).toBeGreaterThan(0.5 - 22);
+  });
+
+  it("traces blank, tiny and fully transparent pictures without errors", () => {
+    for (const img of [rgba(1, 1, () => BLACK), rgba(1, 1, () => WHITE), rgba(20, 20, () => [0, 0, 0, 0]), rgba(1, 50, (x, y) => (y % 2 ? BLACK : WHITE))]) {
+      const a = analyzeImage(img);
+      for (const v of traceVariants(a, 0.5)) {
+        const r = traceImage(img, { ...DEFAULT_TRACE, ...v.settings, background: a.bg, mmPerPx: 0.5 });
+        for (const p of r.paths) for (const q of p.points) expect(Number.isFinite(q.x) && Number.isFinite(q.y)).toBe(true);
+      }
+    }
+  });
+});
+
+describe("sticker outline size limits", () => {
+  it("still outlines a design much smaller than the margin, but not a lone speck", () => {
+    const small = rgba(200, 200, (x, y) => (x >= 95 && x < 105 && y >= 95 && y < 105 ? BLACK : WHITE));
+    const r = traceImage(small, { ...DEFAULT_TRACE, sticker: true, stickerMarginMm: 20, mmPerPx: 0.25 });
+    expect(r.paths.filter((p) => p.stroke === STICKER_COLOR)).toHaveLength(1);
+    const speck = rgba(200, 200, (x, y) => (x === 100 && y === 100 ? BLACK : WHITE));
+    const s = traceImage(speck, { ...DEFAULT_TRACE, sticker: true, stickerMarginMm: 5, mmPerPx: 0.25 });
+    expect(s.paths.filter((p) => p.stroke === STICKER_COLOR)).toHaveLength(0);
+  });
+});

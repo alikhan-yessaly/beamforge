@@ -19,6 +19,16 @@ const job = { startFrom: "current" as const, innerFirst: false };
 const machine = { driver: "ruida", model: "card 0x65106510", profileName: "Ruida laser" };
 
 describe(".laserproj", () => {
+  it("brings out-of-range layer values into range and renumbers repeated object ids", () => {
+    const f = JSON.parse(serializeProject(doc, job, machine));
+    f.doc.layers = [{ color: "#ff0000", speed: 0, minPower: 40, maxPower: 500, passes: 1.6, output: true, kerf: 9, mode: "fill", fill: { pattern: "lines", interval: 0, angle: 0 } }];
+    f.doc.objects.push(structuredClone(f.doc.objects[0]));
+    const p = parseProject(JSON.stringify(f));
+    expect(p.doc.layers![0]).toMatchObject({ speed: 0.1, minPower: 40, maxPower: 100, passes: 2, kerf: 2, fill: { interval: 0.01 } });
+    const ids = (os: Doc["objects"]): string[] => os.flatMap((o) => [o.id, ...ids(o.children ?? [])]);
+    expect(new Set(ids(p.doc.objects)).size).toBe(4);
+  });
+
   it("round-trips the drawing, layers (incl. fill settings), job options and machine entry", () => {
     const text = serializeProject(doc, job, machine, new Date("2026-11-12T10:00:00Z"));
     const p = parseProject(text);

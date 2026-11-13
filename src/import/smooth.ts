@@ -34,6 +34,8 @@ export interface SmoothOptions {
 }
 
 const DEFAULT_CORNER = 50;
+/** Most resampled points per path. */
+const MAX_SAMPLES = 200_000;
 
 const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -189,9 +191,13 @@ export function smoothPath(points: Vec[], closed: boolean, opts: SmoothOptions):
     for (const p of pts) [minX, minY, maxX, maxY] = [Math.min(minX, p.x), Math.min(minY, p.y), Math.max(maxX, p.x), Math.max(maxY, p.y)];
     if (Math.max(maxX - minX, maxY - minY) < s) return null;
   }
+  // Huge or broken coordinates would ask for billions of samples: leave such a path as it is, and cap the samples
+  // per path (a very long path at a fine scale is sampled a little more coarsely instead of running out of memory).
+  const { total } = arcLengths(pts, closed);
+  if (!Number.isFinite(total)) return pts;
   const limit = ((opts.cornerAngle ?? DEFAULT_CORNER) * Math.PI) / 180;
   const cs = limit >= Math.PI ? [] : corners(pts, closed, s, limit);
-  const step = Math.max(0.005, s / 6);
+  const step = Math.max(0.005, s / 6, total / MAX_SAMPLES);
   const sigma = s / 2 / step; // in samples
   // Fine enough that curves stay round (no visible facets); the smoothing has already removed the jag.
   const tol = Math.max(0.01, Math.min(0.05, s / 10));

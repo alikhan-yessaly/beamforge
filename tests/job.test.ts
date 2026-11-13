@@ -192,5 +192,8 @@ describe("estimate", () => {
     expect(formatDuration(0)).toBe("0:00");
     expect(formatDuration(65.4)).toBe("1:05");
     expect(formatDuration(3725)).toBe("1:02:05");
+    expect(formatDuration(NaN)).toBe("–");
+    expect(formatDuration(Infinity)).toBe("–");
+    expect(formatDuration(-5)).toBe("0:00");
   });
 });

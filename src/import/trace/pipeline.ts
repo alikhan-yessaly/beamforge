@@ -3,7 +3,7 @@
 import { msg } from "../../i18n";
 import { SMOOTH_MM, segmentCount, smoothImport } from "../smooth";
 import type { Rgba, VecPath, VectorImport } from "../types";
-import { dilate, fillHoles, joinPolylines, pad, skeletonPaths, thin } from "./morph";
+import { dilate, dropSpecks, fillHoles, joinPolylines, pad, skeletonPaths, thin } from "./morph";
 import { adjust, otsu, threshold, toGray } from "./preprocess";
 import { trace } from "./potrace";
 import { mask, quantize } from "./quantize";
@@ -145,13 +145,23 @@ export function strokeWidth(bits: Uint8Array, w: number, h: number): number {
 
 /** One cut line around everything traced, `marginMm` outside it, holes filled; mm, may reach past the picture. */
 export function stickerOutline(all: Uint8Array, w: number, h: number, mmPerPx: number, marginMm: number, turdSize: number): VecPath[] {
+  if (!(mmPerPx > 0) || !Number.isFinite(marginMm)) return [];
+  // Specks the trace dropped shouldn't get an outline of their own: remove them before growing the shape.
+  if (turdSize > 0) all = dropSpecks(all, w, h, turdSize);
   const r = Math.max(0, marginMm / mmPerPx);
+  // A wide margin on a small, finely sampled design would need a huge padded mask (gigabytes): work on a coarser
+  // copy instead, where the margin is at most ~200 px. The outline is a rounded offset, so it loses nothing visible.
+  const f = Math.ceil(r / 200);
+  if (f > 1) {
+    const sw = Math.ceil(w / f), sh = Math.ceil(h / f);
+    const small = new Uint8Array(sw * sh);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (all[y * w + x]) small[((y / f) | 0) * sw + ((x / f) | 0)] = 1;
+    return stickerOutline(small, sw, sh, mmPerPx * f, marginMm, 0);
+  }
   const p = Math.ceil(r) + 2;
   const big = pad(all, w, h, p);
   const grown = fillHoles(dilate(big.bits, big.w, big.h, r), big.w, big.h);
-  // Specks the trace dropped shouldn't get an outline of their own.
-  const minArea = Math.max(turdSize, Math.PI * (r + 1) ** 2 * 1.5);
-  return trace(grown, big.w, big.h, { turdSize: minArea, alphaMax: 1, optCurve: true, optTolerance: 0.2, tolerancePx: Math.max(0.1, 0.02 / mmPerPx) })
+  return trace(grown, big.w, big.h, { turdSize: 1, alphaMax: 1, optCurve: true, optTolerance: 0.2, tolerancePx: Math.max(0.1, 0.02 / mmPerPx) })
     .filter((tp) => !tp.hole && tp.points.length >= 3)
     .map((tp) => ({ points: tp.points.map((q) => ({ x: (q.x - p) * mmPerPx, y: (q.y - p) * mmPerPx })), closed: true, stroke: STICKER_COLOR, fill: null }));
 }

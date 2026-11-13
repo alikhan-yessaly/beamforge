@@ -54,7 +54,7 @@ simulator works without a machine.
   offers fixes with their time cost: overscan, sweeping areas together, or a lower corner power.
 - **Machine control:** see the head position, jog, go to a point, and use a software Stop. The bed size is read
   from the controller.
-- **Projects:** save and open `.laserproj` files (with the materials they use), export Ruida `.rd` job files, keep a
+- **Projects:** save and open `.laserproj` files (with the materials they use; dropping one on the app opens it), export Ruida `.rd` job files, keep a
   material library per machine, and save a machine's tuning as a `.beamtune` file.
 - **First run:** a welcome screen (language, kind of machine, then a sample, an empty bed or the simulator), a
   "Getting started" checklist up to your first job, connection help, and a notice when a new version is out.

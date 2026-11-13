@@ -1077,4 +1077,5 @@ export const ru: Dictionary = {
   "Suggested versions": "Предлагаемые варианты",
   "The design is too big to keep in the browser between visits. Save it as a project file.": "Рисунок слишком большой, чтобы хранить его в браузере между сеансами. Сохраните его как файл проекта.",
   "Finish or cancel the sketch before importing.": "Завершите или отмените эскиз перед импортом.",
+  "The file has no shapes to import.": "В файле нет фигур для импорта.",
 };

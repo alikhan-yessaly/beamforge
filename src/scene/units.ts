@@ -35,6 +35,8 @@ export function stepLabel(mm: number, u: Units): string {
 
 /** Grid spacing (in mm) for the zoom (px per mm): minor lines at least 7 px apart, majors at round numbers of the unit. */
 export function gridSteps(zoom: number, u: Units = "mm"): { minor: number; major: number } {
+  // A zero, negative or NaN zoom would never reach 7 px below (an endless loop that freezes the page).
+  zoom = Number.isFinite(zoom) && zoom > 1e-6 ? zoom : 1e-6;
   const k = u === "in" ? MM_PER_IN : 1;
   const ladder: [number, number][] = u === "in" ? [[1 / 8, 1], [1 / 4, 1], [1, 10], [5, 50], [10, 100]] : [[1, 10], [5, 50], [10, 100], [50, 500], [100, 1000]];
   for (const [minor, major] of ladder) if (minor * k * zoom >= 7) return { minor: minor * k, major: major * k };

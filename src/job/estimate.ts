@@ -143,7 +143,8 @@ export function trapezoid(len: number, vi: number, vo: number, v: number, a: num
 }
 
 export function formatDuration(s: number): string {
-  const r = Math.round(s);
+  if (!Number.isFinite(s)) return "–";
+  const r = Math.max(0, Math.round(s));
   const h = Math.floor(r / 3600);
   const m = Math.floor((r % 3600) / 60);
   const sec = r % 60;

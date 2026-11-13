@@ -33,7 +33,9 @@ import { isJogKey } from "./keyboardJog";
 import { shortcutsOpen } from "./ShortcutSheet";
 import { sketchKey } from "./sketch/controller";
 import { session as sketchSession } from "./sketch/state";
-import { openProject, saveProject, saveProjectAs } from "../project/state";
+import { openProject, openProjectFile, saveProject, saveProjectAs } from "../project/state";
+import { PROJECT_EXT } from "../project/format";
+import type { VectorImport } from "../import/types";
 import { fitBed, fitBox, view } from "./view";
 import { assignMode, visibleDocument } from "../job/layers";
 import type { LayerMode } from "../scene/model";
@@ -59,10 +61,20 @@ function addImported(file: string, out: ImportOutcome): void {
   notify(tp(["Imported {file} ({n} path)", "Imported {file} ({n} paths)"], paths, { file }));
 }
 
+/** An empty or unreadable drawing is reported instead of opening an empty import dialog. */
+function hasShapes(vi: VectorImport): VectorImport {
+  if (!vi.paths.length) throw new Error(vi.warnings[0] ?? msg("The file has no shapes to import."));
+  return vi;
+}
+
 async function importOne(f: File): Promise<void> {
   // A file without a name of its own ("".dxf, a pasted blob) gets the next "Sketch N".
   const name = cleanName(f.name.replace(/\.[^.]+$/, "")) ?? nextNumberedName(allNames(doc.value.objects), t("Sketch {n}"));
   const lower = f.name.toLowerCase();
+  if (lower.endsWith(PROJECT_EXT)) {
+    await openProjectFile(f);
+    return;
+  }
   if (lower.endsWith(".dxf")) {
     const { object, warnings } = importDxf(await f.text(), name, profile.value);
     addImported(f.name, { objects: object ? [object] : [], fillLayers: [], warnings });
@@ -75,12 +87,12 @@ async function importOne(f: File): Promise<void> {
       const stream = f.stream().pipeThrough(new DecompressionStream("gzip"));
       text = await new Response(stream).text();
     } else text = await f.text();
-    const out = await askVectorImport(name, parseSvg(text));
+    const out = await askVectorImport(name, hasShapes(parseSvg(text)));
     if (out) addImported(f.name, out);
     return;
   }
   if (/\.(plt|hpgl|hgl)$/.test(lower)) {
-    const out = await askVectorImport(name, parseHpgl(await f.text()));
+    const out = await askVectorImport(name, hasShapes(parseHpgl(await f.text())));
     if (out) addImported(f.name, out);
     return;
   }
