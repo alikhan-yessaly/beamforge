@@ -10,7 +10,7 @@ import { newId } from "../scene/model";
 import { doc, notify, prefs, profile } from "../scene/store";
 import { IconButton } from "../ui/icons";
 import { type MaterialPreset, OP_NAME, powerText, presets, presetsError, presetsFor, savePresets, seedPresets, validPreset } from "./materials";
-import { PowerRow } from "./PowerRow";
+import { PowerRamp, PowerRow } from "./PowerRow";
 import { openTuning } from "./TuningDialog";
 
 const FIELDS = [
@@ -35,7 +35,7 @@ function Editor(props: { draft: MaterialPreset; onDone: () => void }) {
   return (
     <li class="ws-preset editing">
       <input class="ws-preset-name" aria-label={t("Material")} placeholder={t("Material, e.g. 3 mm plywood")} value={d.material ?? ""} onInput={(e) => setD({ ...d, material: e.currentTarget.value })} />
-      <div class="ws-row">
+      <div class="ws-preset-op">
         <select aria-label={t("Operation")} value={d.op ?? ""} onChange={(e) => setD({ ...d, op: (e.currentTarget.value || undefined) as MaterialPreset["op"] })}>
           <option value="">{t("Any operation")}</option>
           {OPS.map((op) => (
@@ -54,13 +54,6 @@ function Editor(props: { draft: MaterialPreset; onDone: () => void }) {
             <em>{f.unit}</em>
           </label>
         ))}
-        {advanced && d.op === "cut" && (
-          <label class="ws-lf" title={t("Kerf: the width the beam removes; cut layers using this preset are compensated by it")}>
-            <span>{t("kerf")}</span>
-            <input inputMode="decimal" aria-label={t("Kerf (mm)")} value={d.kerf ?? 0} onInput={(e) => setD({ ...d, kerf: Number(e.currentTarget.value.replace(",", ".")) || undefined })} />
-            <em>mm</em>
-          </label>
-        )}
       </div>
       <PowerRow
         min={d.minPower}
@@ -74,9 +67,22 @@ function Editor(props: { draft: MaterialPreset; onDone: () => void }) {
           setD({ ...d, maxPower, minPower: link ? maxPower : (p.minPower ?? d.minPower) });
         }}
       />
-      <div class="ws-row">
-        <IconButton icon={Check} class="ws-primary" label={t("Save the preset")} onClick={save} />
+      {advanced && d.op === "cut" && (
+        <div class="ws-opts">
+          <div class="ws-opt" title={t("Kerf: the width the beam removes; cut layers using this preset are compensated by it")}>
+            <span class="ws-opt-label">{t("Kerf")}</span>
+            <span class="ws-opt-num">
+              <input inputMode="decimal" aria-label={t("Kerf (mm)")} value={d.kerf ?? 0} onInput={(e) => setD({ ...d, kerf: Number(e.currentTarget.value.replace(",", ".")) || undefined })} />
+              <em>mm</em>
+            </span>
+          </div>
+        </div>
+      )}
+      <div class="ws-row ws-actions">
+        <PowerRamp min={d.minPower} max={d.maxPower} speed={d.speed} />
+        <span class="ws-grow" />
         <IconButton icon={X} label={t("Cancel")} onClick={props.onDone} />
+        <IconButton icon={Check} class="ws-primary" label={t("Save the preset")} onClick={save} />
       </div>
     </li>
   );
@@ -103,7 +109,7 @@ export function MaterialsPanel() {
     ) : (
       <li key={p.id} class="ws-preset">
         <div class="ws-preset-text">
-          <b>{p.material && p.op ? t(OP_NAME[p.op]) : p.name}</b>
+          <b class={p.material && p.op ? "ws-op" : undefined}>{p.material && p.op ? t(OP_NAME[p.op]) : p.name}</b>
           <small>
             {p.speed} mm/s · {powerText(p)} · {p.passes}×{p.kerf ? ` · ${t("kerf {mm} mm", { mm: p.kerf })}` : ""}
             {usedBy(p.id) ? ` · ${t("layer {n}", { n: usedBy(p.id) ?? "" })}` : ""}

@@ -122,8 +122,9 @@ function cutDefaults(material: string): { speed: number; power: number; passes: 
 function Num(props: { label: string; unit: string; value: number; invalid?: boolean; onInput: (v: number) => void }) {
   const [text, setText] = useState(String(props.value));
   return (
-    <label class="ws-lf">
+    <label class="ws-num-field">
       <span>{props.label}</span>
+      <span class="ws-unit-input">
       <input
         inputMode="decimal"
         aria-invalid={props.invalid || undefined}
@@ -136,6 +137,7 @@ function Num(props: { label: string; unit: string; value: number; invalid?: bool
         }}
       />
       <em>{props.unit}</em>
+      </span>
     </label>
   );
 }
@@ -189,7 +191,7 @@ function MakeCard(props: { kind: CardKind; onMade: () => void }) {
         </label>
       )}
       {props.kind !== "kerf" && (
-        <div class="ws-layer-fields">
+        <div class="ws-pair">
           <Num label={t("Engrave speed")} unit="mm/s" value={eng.speed} invalid={!speedOk} onInput={(speed) => setEng((e) => ({ ...e, speed }))} />
           <Num label={t("Power")} unit="%" value={eng.power} invalid={!powerOk} onInput={(power) => setEng((e) => ({ ...e, power }))} />
         </div>

@@ -45,25 +45,22 @@ export function PowerRow(props: { min: number; max: number; speed: number; linke
   const sg = props.suggest;
   return (
     <>
-    <div class="ws-power">
-      <Flame size={14} strokeWidth={1.75} aria-hidden="true" />
-      <PctInput value={props.max} label={t("Power at full speed (% of the tube's maximum)")} onCommit={(maxPower) => props.onChange({ maxPower })} />
-      <em>%</em>
-      <span class="ws-power-corner" title={t("Corner power: used at or below the machine's start speed (corners, line ends), rising to the power at full speed. Too high burns corners; too low may not fire there.")}>{t("corners")}<PctInput
-          value={props.min}
-          label={t("Corner power (%)")}
-          disabled={props.linked}
-          onCommit={(minPower) => props.onChange({ minPower, linkPower: false })}
-        />
+    <div class="ws-layer-fields ws-power">
+      <label class="ws-lf" title={t("Power at full speed (% of the tube's maximum)")}>
+        <Flame size={14} strokeWidth={1.75} aria-hidden="true" />
+        <PctInput value={props.max} label={t("Power at full speed (% of the tube's maximum)")} onCommit={(maxPower) => props.onChange({ maxPower })} />
         <em>%</em>
-      </span>
-      <IconButton
-        icon={props.linked ? Link2 : Unlink2}
-        label={props.linked ? t("Corner power follows power (constant power): on. Click to set a lower corner power.") : t("Corner power follows power: off. Click to link it to power.")}
-        pressed={props.linked}
-        onClick={() => props.onChange({ linkPower: !props.linked })}
-      />
-      <PowerRamp min={props.min} max={props.max} speed={props.speed} start={props.startSpeed} />
+      </label>
+      <div class="ws-lf ws-power-corner" title={t("Corner power: used at or below the machine's start speed (corners, line ends), rising to the power at full speed. Too high burns corners; too low may not fire there.")}>
+        <IconButton
+          icon={props.linked ? Link2 : Unlink2}
+          label={props.linked ? t("Corner power follows power (constant power): on. Click to set a lower corner power.") : t("Corner power follows power: off. Click to link it to power.")}
+          pressed={props.linked}
+          onClick={() => props.onChange({ linkPower: !props.linked })}
+        />
+        <PctInput value={props.min} label={t("Corner power (%)")} disabled={props.linked} onCommit={(minPower) => props.onChange({ minPower, linkPower: false })} />
+        <em>%</em>
+      </div>
     </div>
     {sg !== undefined && sg < props.min - 0.05 && (
       <div class="ws-suggest">

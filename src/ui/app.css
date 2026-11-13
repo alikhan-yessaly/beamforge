@@ -462,3 +462,132 @@ body > #workspace { height: 100%; border: 0; }
 .ws-card-patch text { fill: #555; font-family: system-ui, sans-serif; pointer-events: none; }
 .ws-machine-dialog { width: min(460px, 94vw); }
 @media (max-width: 760px) { .ws-tune-steps { grid-template-columns: repeat(2, 1fr); } }
+
+/* ---------- One look for every control (inputs, selects, buttons), sidebar rows and cards ----------
+   Controls: 28 px high (26 px inside layer cards), 6 px radius, the same border and focus ring as buttons.
+   :where() keeps these at the specificity of `.ws` so the special inputs above (dimension editor, file name)
+   still win. */
+.ws { --ctl-h: 28px; --ctl-h-sm: 26px; --ctl-border: #d5dbe3; --ctl-radius: 6px; --ctl-font: .82rem; --muted: #64748b; --accent: #2563eb; }
+.ws :where(input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=file]), select, textarea) {
+  box-sizing: border-box; height: var(--ctl-h); padding: 0 .5rem; border: 1px solid var(--ctl-border); border-radius: var(--ctl-radius);
+  background: #fff; color: var(--ui-fg); font: inherit; font-size: var(--ctl-font); font-variant-numeric: tabular-nums; min-width: 0;
+}
+.ws :where(textarea) { height: auto; padding: .35rem .5rem; }
+.ws :where(select) {
+  appearance: none; -webkit-appearance: none; padding-right: 1.6rem; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right .55rem center; background-size: 10px 6px;
+}
+.ws :where(input, select, textarea):focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37, 99, 235, .18); }
+.ws :where(input, select, textarea):disabled { background: #f3f5f8; color: var(--muted); cursor: not-allowed; }
+.ws :where(input[aria-invalid="true"]) { border-color: #dc2626; }
+.ws :where(input[type=checkbox], input[type=radio]) { accent-color: var(--accent); margin: 0; }
+.ws button { font: inherit; font-size: var(--ctl-font); line-height: 1.2; }
+.ws button:not(.ib) { min-height: var(--ctl-h); }
+
+/* Primary and link buttons beat the generic `.ws button` rule. */
+.ws .ws-primary-btn { background: var(--accent); border-color: var(--accent); color: #fff; display: inline-flex; align-items: center; gap: .35rem; }
+.ws .ws-primary-btn:hover:not(:disabled) { background: #1d4ed8; }
+.ws .ws-link-btn { min-height: 0; border: 0; background: none; padding: .1rem 0; color: var(--accent); font-size: var(--ctl-font); text-align: left; border-radius: 3px; }
+.ws .ws-link-btn:hover:not(:disabled) { background: none; text-decoration: underline; }
+.ws .ib.ws-primary:hover:not(:disabled) { background: #1d4ed8; }
+
+/* Hints and warnings: one size and colour. */
+.ws .ws-hint { font-size: .78rem; line-height: 1.4; color: var(--muted); max-width: none; margin: .35rem 0; }
+.ws .warn { font-size: .78rem; }
+.ws p.warn { color: #b45309; margin: .35rem 0; }
+
+/* Layer and preset cards: icon | field | unit in two equal columns, so rows line up. */
+.ws .ws-layer-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .3rem .5rem; margin-top: .3rem; }
+.ws .ws-lf { grid-template-columns: 22px minmax(0, 1fr) 2.1rem; gap: .3rem; font-size: .78rem; }
+.ws .ws-lf > svg { justify-self: center; }
+.ws .ws-lf input { height: var(--ctl-h-sm); padding: 0 .4rem; }
+.ws .ws-lf em { font-size: .72rem; color: var(--muted); }
+.ws .ws-power { display: grid; margin-top: .3rem; font-size: .78rem; }
+.ws .ws-power .ws-pct { width: 100%; height: var(--ctl-h-sm); padding: 0 .4rem; }
+.ws .ws-power-corner { margin: 0; color: inherit; }
+.ws .ws-power-corner .ib { width: 22px; min-width: 22px; height: 22px; min-height: 22px; padding: 0; }
+.ws .ws-layer-head .ws-ramp { margin-left: auto; }
+.ws .ws-mode { margin-top: .35rem; }
+.ws .ws-layer-material { margin-top: .35rem; gap: .3rem; }
+.ws .ws-layer-material select, .ws .ws-layer-material input { height: var(--ctl-h-sm); }
+.ws .ws-suggest { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .4rem; margin: .3rem 0 0; font-size: .75rem; color: var(--muted); }
+.ws .ws-suggest small { font-size: inherit; color: inherit; }
+.ws .ws-suggest .ws-link-btn { font-size: .75rem; }
+
+/* Label | control rows (overscan, sweep, scan offset, kerf): one label column so the controls line up. */
+.ws-opts { display: grid; gap: .3rem; margin-top: .4rem; padding-top: .4rem; border-top: 1px dashed #e5e7eb; }
+.ws-opt { display: grid; grid-template-columns: 6.2rem minmax(0, 1fr) auto; align-items: center; gap: .4rem; font-size: .78rem; }
+.ws-opt-label { color: var(--ui-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-opt > select { height: var(--ctl-h-sm); width: 100%; }
+.ws-opt-num { display: inline-grid; grid-template-columns: 4.2rem auto; align-items: center; gap: .3rem; }
+.ws-opt-num input { height: var(--ctl-h-sm) !important; width: 100%; padding: 0 .4rem; }
+.ws-opt-num em { font-style: normal; font-size: .72rem; color: var(--muted); }
+.ws-opt > .ws-hint, .ws-opts > .ws-hint { grid-column: 1 / -1; margin: 0; }
+.ws .ws-segmented.ws-seg-sm > button { min-height: var(--ctl-h-sm); height: var(--ctl-h-sm); padding: 0 .7rem; font-size: .78rem; }
+.ws-opt > .ws-segmented { justify-self: start; }
+
+/* Sidebar forms (machine profile): small muted labels above full-width controls; pairs side by side. */
+.ws .ws-profile label, .ws .ws-profile .ws-pair label { display: grid; gap: .2rem; margin: .45rem 0; font-size: .75rem; color: var(--muted); }
+.ws .ws-profile label > input, .ws .ws-profile label > select { width: 100%; color: var(--ui-fg); }
+.ws-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 .5rem; align-items: end; }
+.ws-pair > label { margin: .45rem 0; }
+.ws-actions { margin-top: .6rem; gap: .35rem; }
+.ws-actions .ws-ramp { margin: 0; }
+
+/* Material library: compact cards, the operation capitalised, icon buttons the size of layer-card ones. */
+.ws .ws-presets .ws-presets { margin: 0; }
+.ws .ws-preset { padding: .35rem .45rem; border-radius: var(--ctl-radius); border-color: #e1e5eb; gap: .25rem; }
+.ws .ws-preset .ib { min-width: 26px; min-height: 26px; padding: .2rem; }
+.ws .ws-preset-text b { font-size: .82rem; font-weight: 600; }
+.ws .ws-preset-text small { font-size: .74rem; }
+.ws .ws-op::first-letter { text-transform: uppercase; }
+.ws .ws-preset-group h4 { margin: .6rem 0 .3rem; font-size: .78rem; font-weight: 600; color: var(--ui-fg); }
+.ws .ws-preset.editing { gap: .3rem; }
+.ws .ws-preset-name { height: var(--ctl-h-sm); }
+.ws-preset-op { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: .3rem; }
+.ws-preset-op > * { height: var(--ctl-h-sm); }
+.ws .ws-panel > button:not(.ib):not(.ws-link-btn) { display: inline-flex; align-items: center; gap: .35rem; margin-top: .5rem; }
+.ws .ws-panel > .ws-link-btn { display: block; margin-top: .5rem; }
+
+/* Tuning progress list: name as a link, status right-aligned, rows evenly spaced. */
+.ws .ws-tune-list { display: grid; gap: .1rem; margin: .4rem 0; }
+.ws .ws-tune-list li { align-items: center; padding: .2rem 0; border-bottom: 1px solid #f1f3f6; font-size: .8rem; }
+.ws .ws-tune-list li:last-child { border-bottom: 0; }
+.ws .ws-tune-list small { font-size: .74rem; }
+
+/* Checks before a job: each fix a full-width button with its cost underneath. */
+.ws .ws-checks .ws-check-card { border-color: #e1e5eb; border-radius: 8px; padding: .55rem .6rem; background: #fbfcfe; }
+.ws .ws-checks .ws-check-card p { font-size: .8rem; line-height: 1.4; }
+.ws-fixes { display: grid; gap: .3rem; }
+.ws .ws-fix { display: flex; flex-direction: column; align-items: flex-start; gap: .05rem; width: 100%; text-align: left; padding: .35rem .6rem; }
+.ws .ws-fix > span { font-weight: 500; }
+.ws .ws-fix small { color: var(--muted); font-size: .72rem; }
+.ws-fixes > .ws-link-btn { justify-self: end; }
+
+/* Dialogs: stacked fields with the same label style; number fields with their unit inside the row. */
+.ws .ws-dialog h3 { margin: 0 0 .5rem; font-size: 1rem; }
+.ws .ws-dialog h4 { font-size: .85rem; }
+.ws .ws-dialog label { font-size: .78rem; color: var(--muted); }
+.ws .ws-dialog label.ws-check { color: var(--ui-fg); font-size: .82rem; }
+.ws .ws-dialog label > input, .ws .ws-dialog label > select { color: var(--ui-fg); }
+.ws-num-field { min-width: 0; }
+.ws-unit-input { display: grid; grid-template-columns: minmax(0, 1fr) 2.6rem; align-items: center; gap: .35rem; }
+.ws-unit-input em { font-style: normal; font-size: .75rem; color: var(--muted); }
+.ws-tune-make { align-items: stretch; }
+.ws-tune-make > .ws-pair { width: min(100%, 22rem); }
+.ws-tune-make > label { width: min(100%, 22rem); }
+.ws-tune-make > .ws-primary-btn { align-self: flex-start; }
+.ws .ws-tune-steps button { min-height: 0; }
+.ws .ws-tuning .ws-segmented > button { padding: .3rem .65rem; }
+
+/* Layer rows fit the panel: the grid track may shrink, the values column gives way first. */
+.ws .ws-lrows { grid-template-columns: minmax(0, 1fr); }
+.ws .ws-lrow { min-width: 0; gap: .25rem; padding: .15rem .25rem; border-radius: var(--ctl-radius); }
+.ws .ws-lrow .ib { min-width: 24px; min-height: 24px; width: 24px; height: 24px; padding: 0; }
+.ws .ws-lrow-order { gap: 2px; }
+.ws .ws-lrow-time { min-width: 2.9rem; font-size: .74rem; }
+
+/* Stacked field labels in panels read like the profile's: small and muted above the control. */
+.ws .ws-panel label.ws-col { gap: .2rem; font-size: .75rem; color: var(--muted); }
+.ws .ws-panel label.ws-col > input, .ws .ws-panel label.ws-col > select { color: var(--ui-fg); }

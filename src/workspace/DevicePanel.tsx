@@ -179,8 +179,12 @@ function FixButton(props: { color: string; fix: Fix; disabled: boolean }) {
   const f = props.fix;
   const after = f.after ? t("then {pct} % deeper", { pct: Math.round(f.after.deepShare * 100) }) : "";
   return (
-    <button type="button" disabled={props.disabled} onClick={() => commit(updateLayer(doc.value, props.color, f.patch))} title={after}>
-      {t(FIX_LABEL[f.kind], { p: f.patch.minPower ?? "" })} <small>({signed(f.seconds)}{after ? `; ${after}` : ""})</small>
+    <button type="button" class="ws-fix" disabled={props.disabled} onClick={() => commit(updateLayer(doc.value, props.color, f.patch))} title={after}>
+      <span>{t(FIX_LABEL[f.kind], { p: f.patch.minPower ?? "" })}</span>
+      <small>
+        {signed(f.seconds)}
+        {after ? ` · ${after}` : ""}
+      </small>
     </button>
   );
 }
@@ -204,13 +208,13 @@ function JobChecks() {
             {c.kind === "mixed" && t("Layer {n}: some areas are swept together and others alone, so they will burn to different depths.", { n: layerNo(c.color) })}
             {c.kind === "tune" && t("These predictions use typical values for this kind of machine. A 5-minute test card on scrap makes them your machine's own.")}
           </p>
-          <div class="ws-row ws-wrap">
+          <div class="ws-fixes">
             {c.fixes.map((f) => (
               <FixButton key={f.kind} color={c.color!} fix={f} disabled={busy} />
             ))}
             {c.kind === "tune" ? (
               <>
-                <button type="button" onClick={() => openTuning("fill")}>{t("Tune…")}</button>
+                <button type="button" class="ws-fix" onClick={() => openTuning("fill")}><span>{t("Tune…")}</span></button>
                 <button type="button" class="ws-link-btn" onClick={() => {
                   const p = profile.value;
                   profile.value = { ...p, tuning: { ...p.tuning, dismissed: [...(p.tuning?.dismissed ?? []), "tune"] } };

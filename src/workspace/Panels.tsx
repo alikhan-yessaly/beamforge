@@ -92,7 +92,7 @@ function AnchorPicker() {
 
 const round = (v: number) => Math.round(v * 100) / 100;
 
-const CORNER_NAME: Record<OriginCorner, string> = { "top-left": msg("top-left"), "top-right": msg("top-right"), "bottom-left": msg("bottom-left"), "bottom-right": msg("bottom-right") };
+const CORNER_NAME: Record<OriginCorner, string> = { "top-left": msg("Top left"), "top-right": msg("Top right"), "bottom-left": msg("Bottom left"), "bottom-right": msg("Bottom right") };
 
 export function PropertiesPanel() {
   const b = selBox.value;
@@ -359,12 +359,14 @@ export function ProfileSection(props: { advanced: boolean }) {
           ))}
         </select>
       </label>
-      <label>
-        {t("Bed width (mm)")} <input type="number" min={1} disabled={cardId !== null} value={draft.bedW} onInput={(e) => setDraft({ ...draft, bedW: Number(e.currentTarget.value) })} />
-      </label>
-      <label>
-        {t("Bed height (mm)")} <input type="number" min={1} disabled={cardId !== null} value={draft.bedH} onInput={(e) => setDraft({ ...draft, bedH: Number(e.currentTarget.value) })} />
-      </label>
+      <div class="ws-pair">
+        <label>
+          {t("Bed width (mm)")} <input type="number" min={1} disabled={cardId !== null} value={draft.bedW} onInput={(e) => setDraft({ ...draft, bedW: Number(e.currentTarget.value) })} />
+        </label>
+        <label>
+          {t("Bed height (mm)")} <input type="number" min={1} disabled={cardId !== null} value={draft.bedH} onInput={(e) => setDraft({ ...draft, bedH: Number(e.currentTarget.value) })} />
+        </label>
+      </div>
       {cardId !== null && <p class="ws-hint" role={bed.state === "error" ? "alert" : undefined}>{bed.message}
         {bed.state === "error" && <IconButton icon={RefreshCw} label={t("Retry the bed read")} onClick={() => void refreshBedDimensions()} />}
       </p>}
@@ -381,10 +383,14 @@ export function ProfileSection(props: { advanced: boolean }) {
       </label>
       {adv ? (
         <>
+          <div class="ws-pair">
           <NumRow label={t("Travel speed (mm/s)")} min={1} value={draft.travelSpeed} onInput={(travelSpeed) => setDraft({ ...draft, travelSpeed })} />
           <NumRow label={t("Acceleration (mm/s²)")} min={1} value={draft.accel} onInput={(accel) => setDraft({ ...draft, accel })} />
+          </div>
+          <div class="ws-pair">
           <NumRow label={t("Start speed (mm/s)")} min={0} value={draft.startSpeed ?? ASSUMED_START_SPEED} title={t("The controller's start speed: moves start and stop at it, and corner power applies at or below it.")} onInput={(startSpeed) => setDraft({ ...draft, startSpeed })} />
           <NumRow label={t("Lowest firing power (%)")} min={0} max={100} value={draft.minFirePower ?? ASSUMED_MIN_FIRE_POWER} title={t("The lowest power at which the tube still fires reliably; suggested corner powers never go below it.")} onInput={(minFirePower) => setDraft({ ...draft, minFirePower })} />
+          </div>
           <label title={t("How far rows engraved right to left land from rows engraved left to right, per speed. Measured with the scan offset test card.")}>
             {t("Scan offsets (speed: mm)")} <input value={scan} placeholder="100: 0.1, 300: 0.25" onInput={(e) => setScan(e.currentTarget.value)} />
           </label>
@@ -430,12 +436,9 @@ export function ProfileSection(props: { advanced: boolean }) {
         }} />
       </div>
       </>}
-      <div class="ws-row">
-        <IconButton icon={Check} label={t("Save the profile")} onClick={saveDraft} />
-        <IconButton icon={Undo2} label={t("Discard changes")} onClick={() => { setDraft(profile.value); setScan(scanText(profile.value.scanOffsets)); }} />
+      <div class="ws-row ws-actions">
         {adv && (
           <>
-            <span class="ws-grow" />
             <IconButton icon={FileDown} label={t("Save this machine's tuning and materials as a .beamtune file")} onClick={exportTune} />
             <IconButton icon={FileUp} label={t("Load a .beamtune tuning file")} onClick={() => tuneRef.current?.click()} />
             <input ref={tuneRef} type="file" accept={`${TUNE_EXT},application/json`} hidden onChange={(e) => {
@@ -445,6 +448,9 @@ export function ProfileSection(props: { advanced: boolean }) {
             }} />
           </>
         )}
+        <span class="ws-grow" />
+        <IconButton icon={Undo2} label={t("Discard changes")} onClick={() => { setDraft(profile.value); setScan(scanText(profile.value.scanOffsets)); }} />
+        <IconButton icon={Check} class="ws-primary" label={t("Save the profile")} onClick={saveDraft} />
       </div>
     </section>
   );

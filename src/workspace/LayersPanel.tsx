@@ -15,7 +15,7 @@ import { commit, doc, notify, prefs, profile } from "../scene/store";
 import { jobDepth, jobEstimate, preview, toolpath, togglePreview } from "./job";
 import { selectedLayer } from "./layerSelect";
 import { NumberInput } from "../ui/NumberInput";
-import { PowerRow } from "./PowerRow";
+import { PowerRamp, PowerRow } from "./PowerRow";
 import { matchesPreset, presets, presetsError, presetSettings, presetsFor, savePresets, validPreset } from "./materials";
 
 /** Small labelled number box: icon, field, unit. ↑/↓ and the wheel step it (see NumberInput). */
@@ -230,22 +230,24 @@ function FillMotionRows(props: { layer: Layer; set: (patch: Partial<Omit<Layer, 
     return i < 0 ? undefined : jobDepth.value.find((d) => d.layer === i);
   })();
   return (
-    <>
-      <div class="ws-row ws-overscan">
-        <span title={t("Laser off while the head speeds up and slows down at each row end, so edges burn as deep as the middle. Costs time.")}>{t("Overscan")}</span>
-        <div class="ws-segmented" role="group" aria-label={t("Overscan")}>
+    <div class="ws-opts">
+      <div class="ws-opt">
+        <span class="ws-opt-label" title={t("Laser off while the head speeds up and slows down at each row end, so edges burn as deep as the middle. Costs time.")}>{t("Overscan")}</span>
+        <div class="ws-segmented ws-seg-sm" role="group" aria-label={t("Overscan")}>
           <button type="button" class={ov === "off" ? "on" : ""} aria-pressed={ov === "off"} onClick={() => props.set({ overscan: "off" })}>{t("Off")}</button>
           <button type="button" class={ov === "auto" ? "on" : ""} aria-pressed={ov === "auto"} title={t("{mm} mm at this speed, from the machine's acceleration", { mm: auto })} onClick={() => props.set({ overscan: "auto" })}>
             {t("Auto")}
           </button>
-          {adv && (
-            <NumberInput class="ws-pct" value={typeof ov === "number" ? ov : null} label={t("Overscan length (mm)")} step={0.5} min={0} max={100} onCommit={(v) => props.set({ overscan: v })} />
-          )}
         </div>
-        {adv && <em>mm</em>}
+        {adv && (
+          <span class="ws-opt-num">
+            <NumberInput value={typeof ov === "number" ? ov : null} label={t("Overscan length (mm)")} step={0.5} min={0} max={100} onCommit={(v) => props.set({ overscan: v })} />
+            <em>mm</em>
+          </span>
+        )}
       </div>
-      <div class="ws-row">
-        <span>{t("Sweep")}</span>
+      <div class="ws-opt">
+        <span class="ws-opt-label">{t("Sweep")}</span>
         <select aria-label={t("Sweep")} value={l.sweep ?? "quick"} title={t(SWEEPS.find((s) => s.mode === (l.sweep ?? "quick"))!.title)} onChange={(e) => props.set({ sweep: e.currentTarget.value as SweepMode })}>
           {SWEEPS.map((s) => (
             <option key={s.mode} value={s.mode} title={t(s.title)}>
@@ -253,18 +255,20 @@ function FillMotionRows(props: { layer: Layer; set: (patch: Partial<Omit<Layer, 
             </option>
           ))}
         </select>
-        {adv && (
-          <label class="ws-lf" title={t("Scan offset for this layer instead of the machine profile's (mm)")}>
-            <span>{t("scan")}</span>
+      </div>
+      {adv && (
+        <div class="ws-opt" title={t("Scan offset for this layer instead of the machine profile's (mm)")}>
+          <span class="ws-opt-label">{t("Scan offset")}</span>
+          <span class="ws-opt-num">
             <NumberInput value={l.scanOffset ?? null} label={t("Scan offset (mm)")} step={0.05} min={-2} max={2} onCommit={(v) => props.set({ scanOffset: v })} />
             <em>mm</em>
-          </label>
-        )}
-      </div>
+          </span>
+        </div>
+      )}
       {depth && uneven(depth) && (
         <p class="ws-hint">{t("Predicted: {pct} % of this engraving burns deeper than the middle of long rows (edges up to {x}× the energy).", { pct: Math.round(depth.deepShare * 100), x: Math.round(depth.peak * 10) / 10 })}</p>
       )}
-    </>
+    </div>
   );
 }
 
@@ -280,6 +284,7 @@ function LayerEditor(props: { layer: Layer; index: number }) {
         <i class="ws-swatch" style={{ background: l.color }} title={l.color} />
         <b>{t("Layer {n}", { n: String(props.index + 1).padStart(2, "0") })}</b>
         <small>{l.color}</small>
+        <PowerRamp min={l.minPower} max={l.maxPower} speed={l.speed} start={startSpeedOf(p)} />
       </div>
       <ModeRows layer={l} set={set} />
       <MaterialRow layer={l} set={set} />
@@ -290,12 +295,14 @@ function LayerEditor(props: { layer: Layer; index: number }) {
       <PowerRow min={l.minPower} max={l.maxPower} speed={l.speed} linked={powerLinked(l)} onChange={set} startSpeed={startSpeedOf(p)} suggest={mode !== "cut" ? suggestCornerPower(l.maxPower, l.speed, p) : undefined} />
       {mode !== "cut" && <FillMotionRows layer={l} set={set} />}
       {mode === "cut" && (prefs.value.advanced || (l.kerf ?? 0) > 0) && (
-        <div class="ws-layer-fields">
-          <label class="ws-lf" title={t("Kerf compensation: outlines grow and holes shrink by half of this, so parts come out at their drawn size")}>
-            <span>{t("kerf")}</span>
-            <NumberInput value={l.kerf ?? 0} label={t("Kerf (mm)")} step={0.01} min={0} max={2} onCommit={(kerf) => set({ kerf })} />
-            <em>mm</em>
-          </label>
+        <div class="ws-opts">
+          <div class="ws-opt" title={t("Kerf compensation: outlines grow and holes shrink by half of this, so parts come out at their drawn size")}>
+            <span class="ws-opt-label">{t("Kerf")}</span>
+            <span class="ws-opt-num">
+              <NumberInput value={l.kerf ?? 0} label={t("Kerf (mm)")} step={0.01} min={0} max={2} onCommit={(kerf) => set({ kerf })} />
+              <em>mm</em>
+            </span>
+          </div>
         </div>
       )}
     </div>
