@@ -1,3 +1,5 @@
+<p align="center"><img src="public/favicon.svg" alt="BeamForge icon" width="128" height="128"></p>
+
 # BeamForge
 
 **Draw. Prepare. Cut.** A browser-based workspace for Ruida laser controllers.
