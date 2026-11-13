@@ -34,7 +34,7 @@ const GROUPS: [string, [string, string][]][] = [
       [msg("Top handle"), msg("Rotate (Shift: 15° steps)")],
       [msg("Wheel / pinch"), msg("Zoom")],
       [msg("Space-drag, right-drag, two-finger scroll"), "Pan"],
-      ["F · B", msg("Zoom to selection · zoom to bed")],
+      ["F · B", msg("Zoom to the selection (or the whole drawing) · zoom to bed")],
       ["P", msg("Toolpath preview")],
       [msg("Right-click"), msg("Object menu")],
     ],

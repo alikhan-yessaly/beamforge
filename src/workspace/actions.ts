@@ -1,6 +1,6 @@
 import { t, tp } from "../i18n";
 import { translate } from "../geom/geom";
-import { appMode } from "./mode";
+import { appMode, enterPrepare } from "./mode";
 import { signal } from "@preact/signals";
 import type { SceneObject } from "../scene/model";
 import { importDxf } from "../scene/importDxf";
@@ -15,6 +15,7 @@ import {
   ungroupSelected,
   rotateAbout,
   boxCenter,
+  selectionBox,
 } from "../scene/ops";
 import { commit, doc, notify, prefs, profile, redo, selBox, selection, undo } from "../scene/store";
 import { togglePreview } from "./job";
@@ -36,13 +37,13 @@ export async function importFiles(files: Iterable<File>): Promise<void> {
     }
     try {
       const { object, warnings } = importDxf(await f.text(), f.name.replace(/\.dxf$/i, ""), profile.value);
-      warnings.forEach((w) => notify(`${f.name}: ${w}`, "warn"));
+      warnings.forEach((w) => notify(t("{file}: {message}", { file: f.name, message: w }), "warn"));
       if (!object) continue;
       commit({ ...doc.value, objects: [...doc.value.objects, object] });
       selection.value = new Set([object.id]);
-      notify(`Imported ${f.name} (${object.paths.length} paths)`);
+      notify(tp(["Imported {file} ({n} path)", "Imported {file} ({n} paths)"], object.paths.length, { file: f.name }));
     } catch (e) {
-      notify(`${f.name}: ${e instanceof Error ? e.message : String(e)}`, "error");
+      notify(t("{file}: {message}", { file: f.name, message: e instanceof Error ? e.message : String(e) }), "error");
     }
   }
 }
@@ -110,8 +111,9 @@ export const actions = {
   mirror: (axis: "h" | "v") => commit(mirror(doc.value, sel(), axis)),
   centerOnBed: () => commit(centerOnBed(doc.value, sel(), profile.value)),
   zoomBed: () => fitBed(profile.value),
+  /** Zoom to the selection, or to the whole drawing when nothing is selected. */
   zoomSelection: () => {
-    const b = selBox.value;
+    const b = selBox.value ?? selectionBox(doc.value, new Set(doc.value.objects.map((o) => o.id)));
     if (b) view.value = fitBox(b);
   },
 };
@@ -124,15 +126,26 @@ export function handleKey(e: KeyboardEvent): void {
   // Project shortcuts work even while a field has focus.
   if (mod && !e.altKey && (e.key.toLowerCase() === "s" || e.key.toLowerCase() === "o")) {
     e.preventDefault();
-    if (e.key.toLowerCase() === "o") void openProject();
+    if (e.key.toLowerCase() === "o") {
+      // Opening replaces the design: leave the read-only Device view first (refused while the machine works).
+      if (appMode.value === "device") enterPrepare();
+      if (appMode.value === "prepare") void openProject();
+    }
     else void (e.shiftKey ? saveProjectAs() : saveProject());
     return;
   }
   if (isJogKey(e)) return; // keyboard jog (keyboardJog.ts)
   if (isTyping(e.target)) return;
-  // The Device view is read-only: only the shortcut sheet.
+  // The Device view is read-only: only the view shortcuts.
   if (appMode.value === "device") {
+    const k = e.key.toLowerCase();
+    const mod = e.metaKey || e.ctrlKey || e.altKey;
     if (e.key === "?") shortcutsOpen.value = true;
+    else if (!mod && k === "b") actions.zoomBed();
+    else if (!mod && k === "f") actions.zoomSelection();
+    else if (!mod && k === "p") togglePreview();
+    else return;
+    e.preventDefault();
     return;
   }
   // Sketch mode owns the keyboard (its own undo/redo, tools, delete).

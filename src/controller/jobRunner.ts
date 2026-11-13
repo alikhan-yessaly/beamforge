@@ -28,7 +28,8 @@ export const STATUS_JOB_PAUSED = 0x02;
 /** LightBurn's write size. */
 export const JOB_CHUNK_BYTES = 255;
 
-export type JobPhase = "checking" | "sending" | "starting" | "running" | "paused" | "done" | "stopped" | "failed";
+/** "stopping": Stop was sent but the controller still reports the job; the job stays active until it ends. */
+export type JobPhase = "checking" | "sending" | "starting" | "running" | "paused" | "stopping" | "done" | "stopped" | "failed";
 
 export interface JobProgress {
   phase: JobPhase;
@@ -127,13 +128,22 @@ export class JobRunner {
       if (at.min.x < 0 || at.min.y < 0 || at.max.x > bed.x || at.max.y > bed.y) {
         const mm = (v: number) => (v / 1000).toFixed(1);
         throw new Error(
-          `Job would run outside the bed: X ${mm(at.min.x)}–${mm(at.max.x)}, Y ${mm(at.min.y)}–${mm(at.max.y)} mm (bed ${mm(bed.x)} × ${mm(bed.y)})`,
+          t("Job would run outside the bed: X {x0}–{x1}, Y {y0}–{y1} mm (bed {w} × {h})", {
+            x0: mm(at.min.x), x1: mm(at.max.x), y0: mm(at.min.y), y1: mm(at.max.y), w: mm(bed.x), h: mm(bed.y),
+          }),
         );
       }
 
       report("sending", s0);
       const chunks = chunkCommands(commands, this.opts.chunkBytes ?? JOB_CHUNK_BYTES);
-      for (let i = 0; i < chunks.length; i++) await this.link.send(chunks[i]!, `job ${i + 1}/${chunks.length}`);
+      for (let i = 0; i < chunks.length; i++) {
+        // Stop during the upload: send nothing more, and stop whatever part of the job the controller already has.
+        if (this.stopRequested) {
+          await this.link.send(stopJob(), "job stop (upload cut short)");
+          break;
+        }
+        await this.link.send(chunks[i]!, `job ${i + 1}/${chunks.length}`);
+      }
 
       // The controller may not report the job before it has parsed the start of it.
       report("starting", s0);
@@ -152,7 +162,7 @@ export class JobRunner {
           // D8 01 on the RDC644XS). Keep polling; give up only after several seconds without answers.
           if (++misses * (pollMs + 800) < (this.opts.lostAfterMs ?? 8000)) continue;
           throw new Error(
-            `Lost contact with the controller (${e instanceof Error ? e.message : String(e)}). The job may still be running: use the machine's Stop if needed.`,
+            t("Lost contact with the controller ({error}). The job may still be running: use the machine's Stop if needed.", { error: e instanceof Error ? e.message : String(e) }),
           );
         }
         const active = (s.status & STATUS_JOB_ACTIVE) !== 0;
@@ -162,7 +172,7 @@ export class JobRunner {
             report("stopped", s);
             return "stopped";
           }
-          report("stopped", s);
+          report("stopping", s);
           continue;
         }
         if (!started) {

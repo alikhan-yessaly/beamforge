@@ -152,3 +152,39 @@ describe("JobRunner resilience", () => {
     await expect(again).rejects.toThrow(/Lost contact/);
   }, 15000);
 });
+
+describe("JobRunner stop", () => {
+  it("a stop during the upload sends no more of the job and ends stopped", async () => {
+    const { sim, link } = await setup();
+    const runner = new JobRunner(link, { pollMs: 20, startTimeoutMs: 1000, chunkBytes: 40 });
+    const sent: number[][] = [];
+    const orig = sim.write.bind(sim);
+    sim.write = async (w) => {
+      const cmds = splitCommands(unswizzle(w));
+      if (cmds[0]?.[1] !== 0x00) sent.push([...cmds.flatMap((c) => [...c])]);
+      if (sent.length === 2 && runner.phase === "sending") void runner.stop();
+      return orig(w);
+    };
+    // Many short segments so the upload takes several writes.
+    const path = Array.from({ length: 60 }, (_, i) => ({ x: 20000 + i * 100, y: 20000 + (i % 2) * 100 }));
+    const end = await runner.run(jobOf("absolute", path));
+    expect(end).toBe("stopped");
+    expect(sent.some((b) => b[0] === 0xd7)).toBe(false); // the job's end never went out
+    expect(sent.at(-1)!.slice(0, 2)).toEqual([0xd8, 0x01]);
+    expect(runner.active).toBe(false);
+    await link.disconnect();
+  });
+
+  it("stays active (stopping) until the controller reports the job ended", async () => {
+    const { link, runner } = await setup();
+    const phases: JobPhase[] = [];
+    const done = runner.run(jobOf("absolute", square(20000, 20000, 20000), 20), (p) => phases.push(p.phase));
+    await until(() => runner.phase === "running");
+    await runner.stop();
+    expect(runner.active).toBe(true);
+    expect(await done).toBe("stopped");
+    expect(phases.at(-1)).toBe("stopped");
+    expect(runner.active).toBe(false);
+    await link.disconnect();
+  });
+});

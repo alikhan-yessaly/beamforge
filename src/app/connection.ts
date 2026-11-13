@@ -113,7 +113,7 @@ export async function connectAndVerify(opts: { chooser?: boolean } = {}): Promis
 }
 
 export async function disconnectMachine(): Promise<void> {
-  if (runner.active && !window.confirm("A job is running. Disconnecting does not stop it. Disconnect anyway?")) return;
+  if (runner.active && !window.confirm(t("A job is running. Disconnecting does not stop it. Disconnect anyway?"))) return;
   await link.disconnect();
   connMessage.value = t("Disconnected.");
 }

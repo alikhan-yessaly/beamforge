@@ -244,7 +244,7 @@ function saveRd(): void {
     const a = Object.assign(document.createElement("a"), { href: url, download: `${name}.rd` });
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    notify(`Saved ${name}.rd (${bytes.length} bytes)`);
+    notify(t("Saved {file} ({n} bytes)", { file: `${name}.rd`, n: bytes.length }));
   } catch (e) {
     notify(e instanceof Error ? e.message : String(e), "error");
   }

@@ -90,7 +90,7 @@ export async function saveJobToController(
     if (bounds.min.x < 0 || bounds.min.y < 0 || bounds.max.x > bed.x || bounds.max.y > bed.y) throw new Error(t("The job doesn't fit the machine's bed"));
   }
   const existing = await listFiles(link);
-  if (existing.includes(n)) throw new Error(t("The controller already has a file named {name}. Pick another name, or delete it on the controller first.", { name: n }));
+  if (existing.includes(n)) throw new Error(t("The controller already has a file named {name}. Pick another name, or delete the old file first.", { name: n }));
   const chunks = [storeJobHeader(n), ...chunkCommands(commands, opts.chunkBytes ?? JOB_CHUNK_BYTES)];
   for (let i = 0; i < chunks.length; i++) {
     await link.send(chunks[i]!, i === 0 ? `store as ${n}` : `store ${i}/${chunks.length - 1}`);

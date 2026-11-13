@@ -248,6 +248,8 @@ body > #workspace { height: 100%; border: 0; }
 .ws-machine #machine-content h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ws-text); margin: .1rem 0 .4rem; }
 .ws-machine #machine-content > .warn { margin: .5rem .6rem; padding: .35rem .5rem; font-size: .75rem; }
 .ws-machine #machine-content label { font-size: .85rem; }
+/* "Go to (machine mm)" heads its own row instead of wrapping beside X. */
+.ws-machine #machine-content .row > strong { flex-basis: 100%; font-size: .85rem; font-weight: 600; }
 
 /* Power row (src/workspace/PowerRow.tsx) */
 .ws-power { display: flex; align-items: center; gap: .25rem; margin-top: .2rem; font-size: .78rem; }

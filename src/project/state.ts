@@ -93,8 +93,8 @@ function load(f: OpenedFile): void {
   if (f.handle) void rememberRecent(f.name, f.handle).then((r) => (recentFiles.value = r));
   const notes: string[] = [];
   if (p.machine.profileName && p.machine.profileName !== profile.value.name) notes.push(t("it was set up for \"{machine}\"", { machine: p.machine.profileName }));
-  if (outsideBed(p.doc, profile.value)) notes.push("part of the drawing is outside this machine's bed");
-  notify(`Opened ${projectName(f.name)}${notes.length ? `: ${notes.join("; ")}` : ""}.`, notes.length ? "warn" : "info");
+  if (outsideBed(p.doc, profile.value)) notes.push(t("part of the drawing is outside this machine's bed"));
+  notify(notes.length ? t("Opened {name}: {notes}.", { name: projectName(f.name), notes: notes.join("; ") }) : t("Opened {name}.", { name: projectName(f.name) }), notes.length ? "warn" : "info");
 }
 
 export async function openProject(): Promise<void> {
@@ -129,7 +129,7 @@ export async function saveProject(): Promise<void> {
     const saved = { doc: doc.value, job: jobNow() };
     await writeHandle(h, text());
     project.value = { ...project.value, saved };
-    notify(`Saved ${project.value.name}.`);
+    notify(t("Saved {name}.", { name: project.value.name }));
   } catch (e) {
     notify(t("Could not save: {error}", { error: errText(e) }), "error");
   }

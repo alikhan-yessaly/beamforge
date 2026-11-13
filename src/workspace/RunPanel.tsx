@@ -109,7 +109,7 @@ export function StartFromControl() {
   );
 }
 
-const PHASE: Record<string, string> = { checking: msg("checking"), sending: msg("sending"), running: msg("running"), paused: msg("paused"), done: msg("done"), stopped: msg("stopped"), failed: msg("failed") };
+const PHASE: Record<string, string> = { checking: msg("checking"), sending: msg("sending"), running: msg("running"), paused: msg("paused"), stopping: msg("stopping"), done: msg("done"), stopped: msg("stopped"), failed: msg("failed") };
 
 /** Why Frame/Start can't run right now, or null when they can. */
 function blockReason(): { text: string; retry?: boolean } | null {
