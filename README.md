@@ -18,7 +18,7 @@
   and the layer order.
 - Use the interface in English, Kazakh or Russian.
 - Frame and run jobs over USB with supported desktop browsers, or save a job in the controller's memory under a
-  name to start later from the machine's panel (not yet verified on hardware).
+  name to start later from the machine's panel.
 - Save projects locally and try the workspace with a simulator.
 
 ## Safety and limitations
