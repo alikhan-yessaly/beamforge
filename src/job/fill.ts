@@ -3,7 +3,9 @@
 // rule, so holes stay empty. Units: bed millimetres, internal orientation.
 import { t } from "../i18n";
 import ClipperLib, { type PolyNodeType } from "clipper-lib";
-import type { Vec } from "../geom/geom";
+import { type Vec, pathsBox } from "../geom/geom";
+import { DEFAULT_PROFILE } from "../scene/model";
+import { orderItems, travelTime } from "./order";
 
 export type FillPattern = "lines" | "cross" | "dots" | "offset";
 
@@ -79,7 +81,7 @@ interface Span {
  * is three cells: the bottom and each arm). Neighbouring cells that share rows are swept together when crossing
  * the gap on every row is shorter than the jump between them (the same rule as for separate areas); otherwise each
  * cell is swept on its own, back and forth (bidirectional), so a sweep never jumps across a gap on every row.
- * The cells come nearest first from `from`, each entered at whichever corner is nearest.
+ * The sweeps are ordered by travel time from `from` (`order.ts`), each entered at whichever corner suits.
  */
 function hatch(rings: Vec[][], angleDeg: number, interval: number, kind: "lines" | "dots", from?: Vec): Vec[][] {
   const a = (angleDeg * Math.PI) / 180;
@@ -167,33 +169,30 @@ function hatch(rings: Vec[][], angleDeg: number, interval: number, kind: "lines"
       end: { x: revLast ? last[0]!.l : last.at(-1)!.r, y: last[0]!.y },
     };
   };
+  // Sweep order by travel time (`order.ts`): each sweep as its two corner entries, each runnable backwards.
+  const items = sweeps.map((rows) => {
+    const variants = [false, true].map((right) => {
+      const k = corner(rows, false, right);
+      return [back(k.start), back(k.end)];
+    });
+    return { pts: variants[0]!, closed: false, box: pathsBox(variants.map((points) => ({ points, closed: false }))), variants };
+  });
   const out: Vec[][] = [];
-  const used = new Uint8Array(sweeps.length);
-  let pos = from ? rot(from, c, s) : { x: x0, y: y0 };
-  for (let n = 0; n < sweeps.length; n++) {
-    let best = -1;
-    let bestD = Infinity;
-    let bestOpt = { fromEnd: false, right: false };
-    sweeps.forEach((rows, i) => {
-      if (used[i]) return;
-      for (const fromEnd of [false, true]) {
-        for (const right of [false, true]) {
-          const st = corner(rows, fromEnd, right).start;
-          const d = Math.hypot(st.x - pos.x, st.y - pos.y);
-          if (d < bestD) [best, bestD, bestOpt] = [i, d, { fromEnd, right }];
-        }
-      }
+  for (const o of orderItems(items, from ?? back({ x: x0, y: y0 }), { cost: travelTime(DEFAULT_PROFILE), innerFirst: false })) {
+    const right = o.variant === 1;
+    const part: Vec[][] = [];
+    sweeps[o.i]!.forEach((spans, k) => {
+      // Odd rows (counted from the first) run back the other way.
+      const rev = (k % 2 === 1) !== right;
+      for (const sp of rev ? [...spans].reverse() : spans) part.push(...pieces(sp, rev));
+      if (out.length + part.length > MAX_FILL_PATHS) throw tooDense();
     });
-    used[best] = 1;
-    const rows = bestOpt.fromEnd ? [...sweeps[best]!].reverse() : sweeps[best]!;
-    rows.forEach((spans, k) => {
-      // Odd rows (counted from the entry row) run back the other way.
-      const rev = (k % 2 === 1) !== bestOpt.right;
-      const order = rev ? [...spans].reverse() : spans;
-      for (const sp of order) out.push(...pieces(sp, rev));
-      if (out.length > MAX_FILL_PATHS) throw tooDense();
-    });
-    pos = corner(sweeps[best]!, bestOpt.fromEnd, bestOpt.right).end;
+    if (o.reversed) {
+      part.reverse();
+      for (const p of part) p.reverse();
+    }
+    out.push(...part);
+    if (out.length > MAX_FILL_PATHS) throw tooDense();
   }
   return out;
 }

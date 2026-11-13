@@ -274,7 +274,7 @@ export function ProfileSection(props: { advanced: boolean }) {
           ))}
         </select>
       </label>
-      <p class="ws-hint">{t("The origin corner is where the head goes when it homes. Coordinates and rulers are measured from it. Travel speed and acceleration only affect the time estimate.")}</p>
+      <p class="ws-hint">{t("The origin corner is where the head goes when it homes. Coordinates and rulers are measured from it. Travel speed and acceleration set the time estimate and the cut order (the quickest travel); the machine uses its own.")}</p>
       {props.advanced && <>
       <h3>{t("Saved machine origins")}</h3>
       <p class="ws-hint">{t("Card IDs identify controller types, not individual machines. Choose your machine by name and confirm its physical home corner; it is never detected automatically.")}</p>

@@ -6,17 +6,19 @@
 //  - layer by layer: every fill (layers in order), then every cut (layers in order);
 //  - object by object: a part (the outermost closed cut path and everything inside it, on any layer) gets its fills
 //    and then its cuts before the head moves to the next part, nearest first.
-// "auto" plans both and keeps the one with less travel (object by object also when layer by layer would cut a shape
-// before the shapes inside it on a later layer). Within a group of cuts: open paths that meet end to end are joined,
-// then greedy nearest-neighbour from the head and 2-opt; a closed path may start at any vertex, an open path from
-// either end. With `innerFirst`, a closed path is only eligible once every closed path inside it is done (so a part
-// is never cut free before its holes).
+// "auto" plans both and keeps the quicker one by the time estimate (object by object also when layer by layer would
+// cut a shape before the shapes inside it on a later layer). Within a group of cuts, open paths that meet end to end
+// are joined, then `order.ts` picks the order, start points and directions by travel time. With `innerFirst`, a
+// closed path comes after every closed path inside it (so a part is never cut free before its holes). Parts, and
+// fill sweeps, are ordered the same way; the last piece heads towards the next part, or home.
 import { t } from "../i18n";
 import { type Box, type Vec, apply, pathsBox, pointInPolygon } from "../geom/geom";
-import type { Doc, Layer } from "../scene/model";
+import { DEFAULT_PROFILE, type Doc, type Layer } from "../scene/model";
+import { estimate } from "./estimate";
 import { DEFAULT_FILL, type FillSettings, MAX_FILL_PATHS, fillIslands, fillPaths, tooDenseMessage } from "./fill";
 import { regionRings } from "./regions";
 import { activeLayers } from "./layers";
+import { INNER_FIRST_LIMIT, type OrderTuning, orderItems, travelTime } from "./order";
 
 export interface Segment {
   x0: number;
@@ -51,14 +53,26 @@ export interface PlanOptions {
   innerFirst: boolean;
   /** Default "auto". */
   order?: JobOrder;
+  /** Travel speed and acceleration: the order is chosen by time (default: the default machine profile). */
+  motion?: { travelSpeed: number; accel: number };
+  /** Search settings for the order (benchmarks and tests). */
+  tuning?: OrderTuning;
+}
+
+/** What ordering needs besides the work: travel cost, acceleration, home, the layers' speeds. */
+interface Ctx {
+  cost: (d: number) => number;
+  accel: number;
+  home: Vec;
+  innerFirst: boolean;
+  layers: Layer[];
+  tuning?: OrderTuning;
 }
 
 interface Item {
   pts: Vec[];
   closed: boolean;
   box: Box;
-  /** indices of closed items inside this one (innerFirst) */
-  inner: number[];
 }
 
 /** One piece of work before ordering: a fill sweep or a cut path, on layer `li` (index into Toolpath.layers). */
@@ -77,9 +91,6 @@ interface Unit {
   paths: Vec[][];
 }
 
-/** Above this many closed paths, skip the O(n²) containment tests (no inner-first, no parts). */
-const INNER_FIRST_LIMIT = 3000;
-
 export function planToolpath(doc: Doc, opts: PlanOptions): Toolpath {
   const out: Toolpath = { layers: [], segments: [], start: opts.start, order: "layer", errors: [], warnings: [] };
   const work: Work[] = [];
@@ -95,7 +106,7 @@ export function planToolpath(doc: Doc, opts: PlanOptions): Toolpath {
         if (p.fill === layer.color && p.closed && p.points.length >= 3) regions.push(regionRings(o.paths, i).map((r) => r.map((v) => apply(o.mat, v))));
         if (p.color !== layer.color || p.points.length < 2) return;
         const pts = p.points.map((v) => apply(o.mat, v));
-        items.push({ pts, closed: p.closed, box: pathsBox([{ points: pts, closed: p.closed }]), inner: [] });
+        items.push({ pts, closed: p.closed, box: pathsBox([{ points: pts, closed: p.closed }]) });
         if (p.closed) legacy.push(pts);
       });
     }
@@ -124,21 +135,23 @@ export function planToolpath(doc: Doc, opts: PlanOptions): Toolpath {
     work.push(...mine);
   }
 
+  const motion = opts.motion ?? DEFAULT_PROFILE;
+  const ctx: Ctx = { cost: travelTime(motion), accel: motion.accel, home: opts.start, innerFirst: opts.innerFirst, layers: out.layers, tuning: opts.tuning };
   const rel = relations(work, opts.innerFirst);
   const want = opts.order ?? "auto";
   let units: Unit[];
   if (want === "layer" || (want === "auto" && !rel)) {
-    units = byLayer(work, out.layers.length, opts);
+    units = byLayer(work, out.layers.length, ctx);
     out.order = "layer";
     if (want === "layer" && rel?.crossLayer) out.warnings.push(t("Layer by layer cuts some shapes before the shapes inside them on a later layer. Move that layer up, or order object by object."));
   } else if (want === "object") {
-    units = byObject(work, rel!, out.layers.length, opts);
+    units = byObject(work, rel!, out.layers.length, ctx);
     out.order = "object";
   } else {
-    const object = byObject(work, rel!, out.layers.length, opts);
-    const layer = rel!.crossLayer ? null : byLayer(work, out.layers.length, opts);
-    const travel = (u: Unit[]) => emit({ ...out, segments: [] }, u, opts.start).reduce((n, s) => (s.cut ? n : n + Math.hypot(s.x1 - s.x0, s.y1 - s.y0)), 0);
-    if (layer && travel(layer) <= travel(object)) [units, out.order] = [layer, "layer"];
+    const object = byObject(work, rel!, out.layers.length, ctx);
+    const layer = rel!.crossLayer ? null : byLayer(work, out.layers.length, ctx);
+    const time = (u: Unit[]) => estimate({ ...out, segments: emit(out, u, opts.start) }, motion).total;
+    if (layer && time(layer) <= time(object) + 1e-9) [units, out.order] = [layer, "layer"];
     else [units, out.order] = [object, "object"];
   }
   out.segments = emit(out, units, opts.start);
@@ -179,40 +192,71 @@ function relations(work: Work[], innerFirst: boolean): { part: number[]; crossLa
   return { part, crossLayer };
 }
 
+/** A run of work for one layer, ordered as a whole: its fill sweeps or its cuts. */
+type Group = { fill: boolean; ws: Work[] };
+
+/**
+ * Order groups one after another from `from`; the last one heads towards `to`. A group followed by a single closed
+ * cut (an outline after the shapes inside it) heads for that outline's vertex nearest where the outline is followed
+ * by, since the outline starts and ends there.
+ */
+function runGroups(units: Unit[], groups: Group[], from: Vec, to: Vec | undefined, ctx: Ctx): Vec {
+  const list = groups.filter((g) => g.ws.length);
+  const targets: (Vec | undefined)[] = list.map(() => undefined);
+  targets[list.length - 1] = to;
+  for (let k = list.length - 2; k >= 0; k--) {
+    const next = list[k + 1]!;
+    const after = targets[k + 1];
+    const only = !next.fill && next.ws.length === 1 && next.ws[0]!.item!.closed ? next.ws[0]!.item!.pts : null;
+    if (only && after) targets[k] = only.reduce((b, v) => (Math.hypot(v.x - after.x, v.y - after.y) < Math.hypot(b.x - after.x, b.y - after.y) ? v : b));
+  }
+  let pos = from;
+  list.forEach((g, k) => {
+    pos = g.fill ? pushFills(units, g.ws, pos, ctx, targets[k]) : pushCuts(units, g.ws, pos, ctx, targets[k]);
+  });
+  return pos;
+}
+
 /** Every fill, layers in order, then every cut, layers in order. */
-function byLayer(work: Work[], nLayers: number, opts: PlanOptions): Unit[] {
+function byLayer(work: Work[], nLayers: number, ctx: Ctx): Unit[] {
+  const groups: Group[] = [];
+  for (let li = 0; li < nLayers; li++) groups.push({ fill: true, ws: work.filter((w) => w.li === li && w.fill) });
+  for (let li = 0; li < nLayers; li++) groups.push({ fill: false, ws: work.filter((w) => w.li === li && w.item) });
   const units: Unit[] = [];
-  let pos = opts.start;
-  for (let li = 0; li < nLayers; li++) pos = pushFills(units, work.filter((w) => w.li === li && w.fill), pos);
-  for (let li = 0; li < nLayers; li++) pos = pushCuts(units, work.filter((w) => w.li === li && w.item), pos, opts.innerFirst);
+  runGroups(units, groups, ctx.home, ctx.home, ctx);
   return units;
 }
 
-/** Part by part, nearest first: its fills (layers in order), then its cuts (layers in order, outlines around later layers last). */
-function byObject(work: Work[], rel: { part: number[] }, nLayers: number, opts: PlanOptions): Unit[] {
+/**
+ * Part by part: its fills (layers in order), then its cuts (layers in order, outlines around later layers last).
+ * The parts are ordered as closed shapes (their outline, or their box) by travel time, round from home and back.
+ */
+function byObject(work: Work[], rel: { part: number[] }, nLayers: number, ctx: Ctx): Unit[] {
   const parts = new Map<number, Work[]>();
   work.forEach((w, i) => parts.set(rel.part[i]!, [...(parts.get(rel.part[i]!) ?? []), w]));
-  const list = [...parts.values()].map((ws) => ({ ws, box: unionBox(ws.map((w) => w.box)) }));
+  const keys = [...parts.keys()];
+  const stand = keys.map((k) => {
+    const root = work[k]!;
+    const box = unionBox(parts.get(k)!.map((w) => w.box));
+    const pts = root.item?.closed ? root.item.pts : [{ x: box.minX, y: box.minY }, { x: box.maxX, y: box.minY }, { x: box.maxX, y: box.maxY }, { x: box.minX, y: box.maxY }];
+    return { pts, closed: true, box };
+  });
+  const seq = orderItems(stand, ctx.home, { cost: ctx.cost, innerFirst: false, to: ctx.home, tuning: ctx.tuning });
   const units: Unit[] = [];
-  const used = new Uint8Array(list.length);
-  let pos = opts.start;
-  for (let n = 0; n < list.length; n++) {
-    let [best, bestD] = [-1, Infinity];
-    list.forEach((p, i) => {
-      if (used[i]) return;
-      const d = boxDist(p.box, pos);
-      if (d < bestD) [best, bestD] = [i, d];
-    });
-    used[best] = 1;
-    const ws = list[best]!.ws;
-    for (let li = 0; li < nLayers; li++) pos = pushFills(units, ws.filter((w) => w.li === li && w.fill), pos);
+  let pos = ctx.home;
+  seq.forEach((s, n) => {
+    const ws = parts.get(keys[s.i]!)!;
+    const groups: Group[] = [];
+    for (let li = 0; li < nLayers; li++) groups.push({ fill: true, ws: ws.filter((w) => w.li === li && w.fill) });
     const cuts = ws.filter((w) => w.item);
     // A closed cut with a closed cut of a later layer inside it waits until the end of the part.
-    const later = (w: Work) => w.item!.closed && opts.innerFirst && cuts.some((o) => o.li > w.li && o.item!.closed && boxIn(o.box, w.box) && !sameBox(o.box, w.box) && pointInPolygon(o.at, w.item!.pts));
+    const later = (w: Work) => w.item!.closed && ctx.innerFirst && cuts.some((o) => o.li > w.li && o.item!.closed && boxIn(o.box, w.box) && !sameBox(o.box, w.box) && pointInPolygon(o.at, w.item!.pts));
     const deferred = cuts.filter(later);
-    for (let li = 0; li < nLayers; li++) pos = pushCuts(units, cuts.filter((w) => w.li === li && !deferred.includes(w)), pos, opts.innerFirst);
-    pos = pushCuts(units, deferred, pos, opts.innerFirst);
-  }
+    for (let li = 0; li < nLayers; li++) groups.push({ fill: false, ws: cuts.filter((w) => w.li === li && !deferred.includes(w)) });
+    groups.push({ fill: false, ws: deferred });
+    // Head for where the next part will start.
+    pos = runGroups(units, groups, pos, seq[n + 1]?.pts[0] ?? ctx.home, ctx);
+  });
   return units;
 }
 
@@ -220,19 +264,18 @@ function unionBox(boxes: Box[]): Box {
   return boxes.reduce((a, b) => ({ minX: Math.min(a.minX, b.minX), minY: Math.min(a.minY, b.minY), maxX: Math.max(a.maxX, b.maxX), maxY: Math.max(a.maxY, b.maxY) }));
 }
 
-/** Fill sweeps nearest first; each may run as generated or fully reversed, whichever starts nearer. */
-function pushFills(units: Unit[], ws: Work[], from: Vec): Vec {
+/** Fill sweeps by travel time; each may run as generated or fully reversed. */
+function pushFills(units: Unit[], ws: Work[], from: Vec, ctx: Ctx, to?: Vec): Vec {
   if (!ws.length) return from;
-  const ordered = orderFills(ws.map((w) => w.fill!), from);
+  const ordered = orderFills(ws.map((w) => w.fill!), from, ctx, to);
   for (const paths of ordered) units.push({ li: ws[0]!.li, paths });
   return ordered.at(-1)!.at(-1)!.at(-1)!;
 }
 
-function pushCuts(units: Unit[], ws: Work[], from: Vec, innerFirst: boolean): Vec {
+function pushCuts(units: Unit[], ws: Work[], from: Vec, ctx: Ctx, to?: Vec): Vec {
   if (!ws.length) return from;
-  const items = ws.map((w) => ({ ...w.item!, inner: [] }));
-  if (innerFirst) markInner(items);
-  const order = orderItems(items, from);
+  const items = ws.map((w) => ({ ...w.item!, speed: ctx.layers[w.li]!.speed }));
+  const order = orderItems(items, from, { cost: ctx.cost, innerFirst: ctx.innerFirst, to, accel: ctx.accel, tuning: ctx.tuning });
   for (const o of order) units.push({ li: ws[o.i]!.li, paths: [o.pts] });
   return order.at(-1)!.pts.at(-1)!;
 }
@@ -285,37 +328,22 @@ export function fillCandidates(groups: Vec[][][], s: FillSettings): { cands: Vec
   return { cands };
 }
 
-/** Nearest sweep next; each may run as generated or fully reversed, whichever starts nearer. */
-function orderFills(cand: Vec[][][], from: Vec): Vec[][][] {
-  const units: Vec[][][] = [];
-  const used = new Uint8Array(cand.length);
-  let pos = from;
-  const d = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
-  for (let n = 0; n < cand.length; n++) {
-    let best = -1;
-    let bestD = Infinity;
-    let bestRev = false;
-    cand.forEach((c, i) => {
-      if (used[i]) return;
-      const fwd = d(pos, c[0]![0]!);
-      const rev = d(pos, c.at(-1)!.at(-1)!);
-      if (fwd < bestD) [best, bestD, bestRev] = [i, fwd, false];
-      if (rev < bestD) [best, bestD, bestRev] = [i, rev, true];
-    });
-    used[best] = 1;
-    const c = cand[best]!;
-    const unit = bestRev ? [...c].reverse().map((p) => [...p].reverse()) : c;
-    units.push(unit);
-    pos = unit.at(-1)!.at(-1)!;
-  }
-  return units;
+/** Sweeps in travel-time order (`order.ts`, each as an open path from its first to its last point). */
+function orderFills(cand: Vec[][][], from: Vec, ctx: Pick<Ctx, "cost" | "tuning">, to?: Vec): Vec[][][] {
+  const items = cand.map((c) => {
+    const pts = [c[0]![0]!, c.at(-1)!.at(-1)!];
+    return { pts, closed: false, box: pathsBox([{ points: pts, closed: false }]) };
+  });
+  return orderItems(items, from, { cost: ctx.cost, innerFirst: false, to, tuning: ctx.tuning }).map((o) =>
+    o.reversed ? [...cand[o.i]!].reverse().map((p) => [...p].reverse()) : cand[o.i]!,
+  );
 }
 
-/** Fill units for one layer's areas, nearest first from `from` (each with all passes before the next). */
-export function fillUnits(groups: Vec[][][], s: FillSettings, from: Vec): { units: Vec[][][]; error?: string } {
+/** Fill units for one layer's areas, in travel-time order from `from` (each with all passes before the next). */
+export function fillUnits(groups: Vec[][][], s: FillSettings, from: Vec, motion: { travelSpeed: number; accel: number } = DEFAULT_PROFILE): { units: Vec[][][]; error?: string } {
   const c = fillCandidates(groups, s);
   if (c.error) return { units: [], error: c.error };
-  return { units: c.cands.length ? orderFills(c.cands, from) : [] };
+  return { units: c.cands.length ? orderFills(c.cands, from, { cost: travelTime(motion) }) : [] };
 }
 
 /** Above this many islands, sweep them all as one (the pairwise test is O(n²)). */
@@ -387,7 +415,7 @@ function joinOpenPaths(items: Item[]): Item[] {
     }
     const closed = pts.length > 3 && samePoint(pts[0]!, pts.at(-1)!, JOIN);
     if (closed) pts = pts.slice(0, -1);
-    joined.push({ pts, closed, box: pathsBox([{ points: pts, closed }]), inner: [] });
+    joined.push({ pts, closed, box: pathsBox([{ points: pts, closed }]) });
   }
   return [...items.filter((i) => i.closed), ...joined];
 }
@@ -395,167 +423,4 @@ function joinOpenPaths(items: Item[]): Item[] {
 function travel(segs: Segment[], a: Vec, b: Vec): void {
   if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-6) return;
   segs.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y, cut: false, layer: -1 });
-}
-
-function markInner(items: Item[]): void {
-  const closed = items.map((it, i) => i).filter((i) => items[i]!.closed && items[i]!.pts.length >= 3);
-  if (closed.length > INNER_FIRST_LIMIT) return;
-  for (const i of closed) {
-    const outer = items[i]!;
-    for (const j of closed) {
-      if (i === j) continue;
-      const inner = items[j]!;
-      const b = inner.box;
-      const B = outer.box;
-      if (b.minX < B.minX || b.minY < B.minY || b.maxX > B.maxX || b.maxY > B.maxY) continue;
-      // Equal boxes (duplicate shapes) would each wait for the other: let the lower index count as outer.
-      const same = b.minX === B.minX && b.minY === B.minY && b.maxX === B.maxX && b.maxY === B.maxY;
-      if (same ? j < i : !pointInPolygon(inner.pts[0]!, outer.pts)) continue;
-      outer.inner.push(j);
-    }
-  }
-}
-
-const boxDist = (b: Box, p: Vec) => Math.hypot(Math.max(b.minX - p.x, 0, p.x - b.maxX), Math.max(b.minY - p.y, 0, p.y - b.maxY));
-
-/** Order items: greedy nearest neighbour, improved by 2-opt; each item's points in cut order (closed paths end where they began). */
-function orderItems(items: Item[], from: Vec): { i: number; pts: Vec[] }[] {
-  return improve(items, nearestOrder(items, from), from);
-}
-
-/** Greedy nearest-neighbour order (item indices) honouring inner-first. */
-function nearestOrder(items: Item[], from: Vec): number[] {
-  const done = new Uint8Array(items.length);
-  const ready = (i: number) => items[i]!.inner.every((j) => done[j]);
-  const result: number[] = [];
-  let pos = from;
-  for (let n = 0; n < items.length; n++) {
-    let best = -1;
-    let bestD = Infinity;
-    let bestK = 0;
-    for (let i = 0; i < items.length; i++) {
-      if (done[i] || !ready(i)) continue;
-      const it = items[i]!;
-      if (boxDist(it.box, pos) >= bestD) continue;
-      const { d, k } = nearestStart(it, pos);
-      if (d < bestD) [best, bestD, bestK] = [i, d, k];
-    }
-    if (best < 0) {
-      // Only reachable through a containment cycle; fall back to any remaining item.
-      best = done.indexOf(0);
-      bestK = 0;
-    }
-    done[best] = 1;
-    result.push(best);
-    pos = startAt(items[best]!, bestK).at(-1)!;
-  }
-  return result;
-}
-
-/** Above this many items 2-opt is skipped (it's O(n²) per sweep). */
-const TWO_OPT_LIMIT = 1500;
-
-/**
- * 2-opt on the travel between items: reverse a run of the order when that shortens the moves into and out of it,
- * as long as every shape still comes after the shapes inside it. Then pick each start point for the final order.
- */
-function improve(items: Item[], order: number[], from: Vec): { i: number; pts: Vec[] }[] {
-  const n = order.length;
-  if (n >= 4 && n <= TWO_OPT_LIMIT) {
-    // Entry/exit points: closed paths at their nearest-start vertex (fixed for this pass), open ones at either end.
-    const rev = new Uint8Array(items.length);
-    const ent = (i: number) => (items[i]!.closed ? rep(items[i]!) : rev[i] ? items[i]!.pts.at(-1)! : items[i]!.pts[0]!);
-    const ex = (i: number) => (items[i]!.closed ? rep(items[i]!) : rev[i] ? items[i]!.pts[0]! : items[i]!.pts.at(-1)!);
-    const d = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
-    const pos = new Int32Array(items.length);
-    const reindex = () => order.forEach((it, k) => (pos[it] = k));
-    reindex();
-    const deadline = Date.now() + 150;
-    for (let improved = true; improved && Date.now() < deadline; ) {
-      improved = false;
-      for (let a = 0; a < n - 1; a++) {
-        const before = a === 0 ? from : ex(order[a - 1]!);
-        for (let b = a + 1; b < n; b++) {
-          const after = b === n - 1 ? null : ent(order[b + 1]!);
-          const oldCost = d(before, ent(order[a]!)) + (after ? d(ex(order[b]!), after) : 0);
-          // Reversed run: enters at the old last item's exit side, leaves at the old first item's entry side.
-          const fa = order[b]!;
-          const la = order[a]!;
-          const newEnt = items[fa]!.closed ? rep(items[fa]!) : rev[fa] ? items[fa]!.pts[0]! : items[fa]!.pts.at(-1)!;
-          const newEx = items[la]!.closed ? rep(items[la]!) : rev[la] ? items[la]!.pts.at(-1)! : items[la]!.pts[0]!;
-          const newCost = d(before, newEnt) + (after ? d(newEx, after) : 0);
-          if (newCost >= oldCost - 1e-9) continue;
-          if (!reversible(items, order, pos, a, b)) continue;
-          for (let k = a; k <= b; k++) {
-            const it = order[k]!;
-            if (!items[it]!.closed) rev[it] = rev[it] ? 0 : 1;
-          }
-          order.splice(a, b - a + 1, ...order.slice(a, b + 1).reverse());
-          reindex();
-          improved = true;
-          break;
-        }
-      }
-    }
-    // Final points: open paths in the chosen direction, closed ones from the vertex nearest where the head is.
-    const out: { i: number; pts: Vec[] }[] = [];
-    let at = from;
-    for (const i of order) {
-      const it = items[i]!;
-      const pts = it.closed ? startAt(it, nearestStart(it, at).k) : rev[i] ? [...it.pts].reverse() : it.pts;
-      out.push({ i, pts });
-      at = pts.at(-1)!;
-    }
-    return out;
-  }
-  const out: { i: number; pts: Vec[] }[] = [];
-  let at = from;
-  for (const i of order) {
-    const pts = startAt(items[i]!, nearestStart(items[i]!, at).k);
-    out.push({ i, pts });
-    at = pts.at(-1)!;
-  }
-  return out;
-}
-
-/** A closed path's stand-in point for 2-opt (its first vertex). */
-const rep = (it: Item) => it.pts[0]!;
-
-/** Reversing order[a..b] keeps inner-first: no shape in the run has a shape inside it later in the run. */
-function reversible(items: Item[], order: number[], pos: Int32Array, a: number, b: number): boolean {
-  for (let k = a; k <= b; k++) {
-    for (const j of items[order[k]!]!.inner) {
-      const pj = pos[j]!;
-      if (pj >= a && pj < k) return false; // inner j is before its outer inside the run: reversing puts it after
-    }
-  }
-  return true;
-}
-
-/** Closed: nearest vertex k. Open: k = 0 (start) or 1 (reverse, start at the end). */
-function nearestStart(it: Item, p: Vec): { d: number; k: number } {
-  if (!it.closed) {
-    const a = it.pts[0]!;
-    const b = it.pts.at(-1)!;
-    const da = Math.hypot(a.x - p.x, a.y - p.y);
-    const db = Math.hypot(b.x - p.x, b.y - p.y);
-    return da <= db ? { d: da, k: 0 } : { d: db, k: 1 };
-  }
-  let d = Infinity;
-  let k = 0;
-  it.pts.forEach((v, i) => {
-    const e = Math.hypot(v.x - p.x, v.y - p.y);
-    if (e < d) [d, k] = [e, i];
-  });
-  return { d, k };
-}
-
-function startAt(it: Item, k: number): Vec[] {
-  if (!it.closed) return k === 0 ? it.pts : [...it.pts].reverse();
-  const pts = it.pts;
-  // Drop an explicit closing vertex so the rotation doesn't double it, then close the loop.
-  const last = pts.at(-1)!;
-  const ring = pts.length > 1 && last.x === pts[0]!.x && last.y === pts[0]!.y ? pts.slice(0, -1) : pts;
-  const i = k % ring.length;
-  return [...ring.slice(i), ...ring.slice(0, i), ring[i]!];
 }

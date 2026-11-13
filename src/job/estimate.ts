@@ -98,7 +98,7 @@ function chainTimes(segs: Segment[], i: number, j: number, v: number, a: number)
   return out;
 }
 
-function junctionSpeed(ax: number, ay: number, bx: number, by: number, v: number, a: number): number {
+export function junctionSpeed(ax: number, ay: number, bx: number, by: number, v: number, a: number): number {
   const cos = -(ax * bx + ay * by); // cos of the angle between the reversed incoming and the outgoing direction
   if (cos > 0.999999) return 0; // full reversal
   if (cos < -0.999999) return v; // straight on

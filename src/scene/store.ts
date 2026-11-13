@@ -34,7 +34,7 @@ export interface Prefs {
   innerFirst: boolean;
   /** Job placement: where the design sits on the bed, or relative to the head when the job starts. */
   startFrom: "absolute" | "current";
-  /** Job order: layer by layer, object by object, or whichever travels less. */
+  /** Job order: layer by layer, object by object, or whichever is quicker by the time estimate. */
   jobOrder: JobOrder;
 }
 

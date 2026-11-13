@@ -51,7 +51,7 @@ export function designOrigin(doc: Doc, profile: MachineProfile): PointUm | null 
 
 export function buildJob(doc: Doc, profile: MachineProfile, opts: BuildOptions): BuiltJob {
   const home = { x: profile.origin.endsWith("right") ? profile.bedW : 0, y: profile.origin.startsWith("bottom") ? profile.bedH : 0 };
-  const tp = planToolpath(doc, { start: home, innerFirst: opts.innerFirst, order: opts.order });
+  const tp = planToolpath(doc, { start: home, innerFirst: opts.innerFirst, order: opts.order, motion: profile });
   if (tp.errors.length) throw new Error(tp.errors.join(" "));
   if (!tp.segments.some((s) => s.cut)) throw new Error(t("Nothing to cut: no layer with output on has any paths"));
 

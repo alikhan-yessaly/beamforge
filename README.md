@@ -122,9 +122,16 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
 - The **Order** setting has three choices:
   - **Object by object:** each part is engraved and cut before the next one, nearest first.
   - **Layer by layer:** all fills, then all cuts.
-  - **Fastest** (the default): whichever of the two travels less.
+  - **Fastest** (the default): whichever of the two finishes sooner by the time estimate.
+- The cut order is optimised for travel time, using the machine profile's travel speed and acceleration, so lots of
+  small shapes (text) don't make the head zigzag:
+  - A letter is cut together with its counters (the holes in o, a, e).
+  - The tour is improved with 2-opt and Or-opt and doesn't cross itself. It ends near where the outline around it
+    starts, and the outline ends near home.
+  - A closed shape starts where arriving and leaving is quickest, preferring a sharp corner, where the head stops
+    anyway and the seam is hidden.
 - Fill paths are planned to avoid wasted travel:
-  - Hatching sweeps each region back and forth.
+  - Hatching sweeps each region back and forth, and the sweeps are ordered the same way as cuts.
   - Cross-hatch continues from where the first direction ended.
   - Offset contours run from the outside in.
 - The **preview** draws the toolpath, including travel moves, with a time scrubber. The time estimate uses the

@@ -120,7 +120,7 @@ function JobSummary() {
       </div>
       <div class="ws-row">
         <span>{t("Order")}</span>
-        <select value={pr.jobOrder} disabled={busy} title={t("Fastest picks whichever travels less. Either way, fills run before the cuts around them.")} onChange={(e) => (prefs.value = { ...pr, jobOrder: e.currentTarget.value as JobOrder })}>
+        <select value={pr.jobOrder} disabled={busy} title={t("Fastest picks whichever finishes sooner by the time estimate. Either way, fills run before the cuts around them.")} onChange={(e) => (prefs.value = { ...pr, jobOrder: e.currentTarget.value as JobOrder })}>
           {ORDER_NAME.map(([v, label]) => (
             <option key={v} value={v}>
               {pr.jobOrder === "auto" && v === "auto" ? `${t(label)}: ${(tp_.order === "object" ? t("object by object") : t("layer by layer"))}` : t(label)}
