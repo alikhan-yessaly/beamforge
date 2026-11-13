@@ -63,14 +63,29 @@ simulator works without a machine.
 
 | | |
 |---|---|
-| ![Sketch mode with a DXF opened as an editable sketch](screenshots/sketch.png) | ![Device mode with the toolpath preview and the job summary](screenshots/device.png) |
-| **Sketch mode.** Any DXF opens as a sketch. The toolbar has drawing, modify, dimension and constraint tools; it shows the remaining degrees of freedom. | **Device mode.** The planned job, with travel moves as dashed lines. The fills (blue) run before the cuts around them, one part at a time. The Job tab lists the time, cut and travel lengths, the order and the files on the machine. |
-| ![Machine tab with head position, jog pad and Go to](screenshots/machine.png) | |
-| **Machine tab.** The head position, hold-to-jog pad, Go to and the machine profile. Here it is connected to the built-in simulator. | |
+| ![The welcome screen on first start: language, kind of machine and how to start](screenshots/welcome.png) | ![Sketch mode with a DXF opened as an editable sketch](screenshots/sketch.png) |
+| **Welcome.** The first start asks for the language and the kind of machine, then opens the sample, an empty bed or the simulator. | **Sketch mode.** Any DXF opens as a sketch, named at the top. The toolbar has drawing, modify, dimension and constraint tools; it shows the remaining degrees of freedom. |
+| ![Device mode with the toolpath preview and the job summary](screenshots/device.png) | ![Machine tab with head position, jog pad and Go to](screenshots/machine.png) |
+| **Device mode.** The planned job, with travel moves as dashed lines. The fills (blue) run before the cuts around them, one part at a time. The Job tab lists the time, size, cut and travel lengths and the layers, and suggests fixes for uneven engraving. | **Machine tab.** The head position, hold-to-jog pad, Go to and the machine profile. Here it is connected to the built-in simulator. |
+| ![The Getting started checklist with five of seven steps done](screenshots/checklist.png) | ![Connection help with the five things to check](screenshots/connection-help.png) |
+| **Getting started.** A checklist from choosing the machine to the first job; steps tick off as you do them. | **Connection help.** Power, cable, driver, other programs holding the port and the browser, with a button that copies diagnostics for a bug report. |
 
 The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
 
 ## Features in detail
+
+### First run and help
+
+- **Welcome screen** on the first start: pick the language and the kind of machine (it sets typical speed-up,
+  start speed and starting materials), then open the sample, start with an empty bed, or try the simulator with no
+  laser attached. Help → Welcome guide opens it again.
+- **Getting started** checklist in the status bar: choose the machine, put a drawing on the bed, set speed and
+  power per colour, prepare the job, connect, frame and start. Steps tick off by themselves; the list can be
+  hidden.
+- **Help menu** (? at the bottom right): the welcome guide, keyboard shortcuts, connection help, Copy diagnostics
+  (version, browser, connection and recent controller traffic, for bug reports) and the safety notes.
+- **Update notice:** when a new version is published, a notice offers to reload.
+- **Units:** the mm / in button next to Help switches the display to inches (see below).
 
 ### Drawing and sketches
 
@@ -254,9 +269,10 @@ npm ci
 npm run dev
 ```
 
-Open the localhost URL printed by Vite. Try the simulator before connecting hardware: open the connection menu
-next to the plug icon (top right), pick **Simulator** and connect. Then import `samples/demo.dxf`, press
-**Prepare job** and explore Device mode.
+Open the localhost URL printed by Vite (or the [beta site](https://alikhan-yessaly.github.io/beamforge/)). The
+welcome screen asks for the language and the kind of machine; choose **Try the simulator** to explore without
+hardware, then follow the **Getting started** checklist in the status bar: prepare the sample job, connect, frame
+and start. Later, the connection menu next to the plug icon (top right) switches between USB and the simulator.
 
 Run `npm test` and `npm run build` to validate changes.
 
