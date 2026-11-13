@@ -7,6 +7,7 @@ import { type Box, apply, emptyBox, addPoint, isEmptyBox } from "../geom/geom";
 import { writeDxf } from "../export/dxf";
 import { DPI_PRESETS, MAX_PIXELS, type Orientation, PAGE_SIZES, orientPage, pixelInfo, setJpegDpi, setPngDpi, smallestPage } from "../export/page";
 import { writePdf } from "../export/pdf";
+import { fillRegions } from "../export/regions";
 import { layoutExport, writeSvg } from "../export/svg";
 import type { ExportPath } from "../import/types";
 import { activeLayers } from "../job/layers";
@@ -102,15 +103,11 @@ async function paint(ctx: Ctx, paths: ExportPath[], objects: SceneObject[], k: n
     p.points.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
     if (p.closed) ctx.closePath();
   };
-  const fills = new Map<string, ExportPath[]>();
-  for (const p of paths) {
-    const f = p.fillLayer && p.closed ? p.color : p.fill && p.closed ? p.fill : null;
-    if (f) fills.set(f, [...(fills.get(f) ?? []), p]);
-  }
-  for (const [color, list] of fills) {
+  // Disjoint regions, so a shape filled in another colour inside a filled shape keeps its own colour.
+  for (const r of fillRegions(paths)) {
     ctx.beginPath();
-    list.forEach(ring);
-    ctx.fillStyle = color;
+    for (const pts of r.rings) ring({ points: pts, closed: true, color: r.color });
+    ctx.fillStyle = r.color;
     ctx.fill("evenodd");
   }
   ctx.lineWidth = Math.max(0.1, opts.minLinePx / k);

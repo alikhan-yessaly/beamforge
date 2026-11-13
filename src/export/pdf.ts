@@ -1,6 +1,7 @@
 // Hand-written minimal PDF 1.4: one page, vector paths, one optional-content layer per colour.
 import type { ExportPath } from "../import/types";
-import { fmtNum, groupLayers, hexParts, layoutExport, splitLayer } from "./svg";
+import { fillRegions, layerFills } from "./regions";
+import { fmtNum, groupLayers, hexParts, layoutExport } from "./svg";
 
 const PT_PER_MM = 72 / 25.4;
 /** 0.1 mm stroke, as in the SVG export. */
@@ -26,20 +27,21 @@ export function writePdf(
   const px = (x: number) => fmtNum((x + lay.dx) * PT_PER_MM);
   const py = (y: number) => fmtNum((hMm - (y + lay.dy)) * PT_PER_MM); // PDF is y up
 
-  const subpaths = (list: ExportPath[]): string =>
+  const subpaths = (list: { points: { x: number; y: number }[]; closed: boolean }[]): string =>
     list.map((p) => `${p.points.map((q, i) => `${px(q.x)} ${py(q.y)} ${i === 0 ? "m" : "l"}`).join(" ")}${p.closed ? " h" : ""}`).join(" ");
 
   const layers = groupLayers(paths);
+  const regions = fillRegions(paths);
   const content: string[] = [];
   layers.forEach((layer, i) => {
-    const { areaFills, fillPaths, strokes } = splitLayer(layer);
+    const strokes = layer.paths.filter((p) => !p.fillLayer);
     const [r, g, b] = hexParts(layer.color);
     content.push(`/OC /OC${i + 1} BDC`);
-    for (const [color, list] of areaFills) {
+    // Regions never overlap (see regions.ts), so nested colours keep their own colour.
+    for (const [color, rings] of layerFills(regions, layer.color)) {
       const [fr, fg, fb] = hexParts(color);
-      content.push(`${comp(fr)} ${comp(fg)} ${comp(fb)} rg`, `${subpaths(list)} f*`);
+      content.push(`${comp(fr)} ${comp(fg)} ${comp(fb)} rg`, `${subpaths(rings.map((points) => ({ points, closed: true })))} f*`);
     }
-    if (fillPaths.length) content.push(`${comp(r)} ${comp(g)} ${comp(b)} rg`, `${subpaths(fillPaths)} f*`);
     if (strokes.length) content.push(`${comp(r)} ${comp(g)} ${comp(b)} RG`, `${LINE_WIDTH_PT} w 1 J 1 j`, `${subpaths(strokes)} S`);
     content.push("EMC");
   });

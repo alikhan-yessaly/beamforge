@@ -1,6 +1,7 @@
 // SVG writer: millimetre units (1 user unit = 1 mm), one Inkscape layer per colour.
-import { pathsBox } from "../geom/geom";
+import { type Vec, pathsBox } from "../geom/geom";
 import type { ExportPath } from "../import/types";
+import { fillRegions, layerFills } from "./regions";
 
 export interface ExportLayout {
   /** Page size, mm. */
@@ -85,25 +86,9 @@ function pathData(paths: ExportPath[], lay: ExportLayout): string {
     .join("");
 }
 
-/** Closed paths grouped by a colour, in first-seen order. */
-function groupBy(paths: ExportPath[], key: (p: ExportPath) => string | undefined): Map<string, ExportPath[]> {
-  const m = new Map<string, ExportPath[]>();
-  for (const p of paths) {
-    const k = key(p);
-    if (k === undefined) continue;
-    const list = m.get(k);
-    if (list) list.push(p);
-    else m.set(k, [p]);
-  }
-  return m;
-}
-
-/** Layer colours' paths split into area fills (drawn first), filled layer paths and stroked outlines. */
-export function splitLayer(layer: ExportLayer): { areaFills: Map<string, ExportPath[]>; fillPaths: ExportPath[]; strokes: ExportPath[] } {
-  const fillPaths = layer.paths.filter((p) => p.fillLayer);
-  const strokes = layer.paths.filter((p) => !p.fillLayer);
-  const areaFills = groupBy(strokes, (p) => (p.closed && p.fill ? normHex(p.fill) : undefined));
-  return { areaFills, fillPaths, strokes };
+/** Rings as one compound path's data. */
+function ringData(rings: Vec[][], lay: ExportLayout): string {
+  return rings.map((r) => r.map((q, i) => `${i === 0 ? "M" : "L"}${fmtNum(q.x + lay.dx)} ${fmtNum(q.y + lay.dy)}`).join("") + "Z").join("");
 }
 
 export function writeSvg(paths: ExportPath[], opts: { keepPosition?: boolean; page?: { w: number; h: number }; marginMm?: number } = {}): string {
@@ -114,12 +99,12 @@ export function writeSvg(paths: ExportPath[], opts: { keepPosition?: boolean; pa
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">`,
   ];
+  const regions = fillRegions(paths);
   for (const layer of groupLayers(paths)) {
-    const { areaFills, fillPaths, strokes } = splitLayer(layer);
+    const strokes = layer.paths.filter((p) => !p.fillLayer);
     out.push(`<g id="layer-${layer.color.slice(1)}" inkscape:groupmode="layer" inkscape:label="${layer.name}">`);
-    // Area fills first so the outline stays visible on top of them.
-    for (const [color, list] of areaFills) out.push(`<path d="${pathData(list, lay)}" fill="${color}" fill-rule="evenodd" stroke="none"/>`);
-    if (fillPaths.length) out.push(`<path d="${pathData(fillPaths, lay)}" fill="${layer.color}" fill-rule="evenodd" stroke="none"/>`);
+    // Fills first so the outline stays visible on top of them. Regions never overlap (see regions.ts).
+    for (const [color, rings] of layerFills(regions, layer.color)) out.push(`<path d="${ringData(rings, lay)}" fill="${color}" fill-rule="evenodd" stroke="none"/>`);
     for (const p of strokes) out.push(`<path d="${pathData([p], lay)}" fill="none" stroke="${layer.color}" stroke-width="0.1"/>`);
     out.push(`</g>`);
   }
