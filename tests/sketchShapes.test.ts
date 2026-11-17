@@ -74,7 +74,7 @@ describe("patterns", () => {
 
   it("makes a 3 × 2 grid whose copies follow the original's size and position", () => {
     const { s, lines, pts, dim } = square();
-    const r = linearPattern(s, lines, { x: 10, y: 0 }, 3, { x: 0, y: 8 }, 2);
+    const r = linearPattern(s, lines, 3, 10, 2, 8);
     if ("error" in r) throw new Error(r.error);
     expect(r.s.entities).toHaveLength(24);
     // Resize the original: hidden copies of its dimension follow; move it: the copies keep their spacing.
@@ -86,6 +86,22 @@ describe("patterns", () => {
     expect(last.kind === "line" && measure(sol.sketch, "distance", [last.id])).toBeCloseTo(6, 5);
     expect(last.kind === "line" && pt(sol.sketch, last.p1).x).toBeCloseTo(21, 5);
     expect(last.kind === "line" && pt(sol.sketch, last.p1).y).toBeCloseTo(9, 5);
+  });
+
+  it("keeps one visible X and Y spacing dimension that drives every copy", () => {
+    const { s, lines, pts } = square();
+    const r = linearPattern(s, lines, 3, 10, 2, 8);
+    if ("error" in r || !r.dimX || !r.dimY) throw new Error("no dimensions");
+    const visible = r.s.constraints.filter((c) => (c.type === "distanceX" || c.type === "distanceY") && !c.hidden);
+    expect(visible.map((c) => c.id).sort()).toEqual([r.dimX, r.dimY].sort());
+    // Edit the spacing afterwards the way the dimension editor does: linked steps follow.
+    const edit = (sk: typeof r.s, id: string, v: number) => ({ ...sk, constraints: sk.constraints.map((c) => (c.id === id || c.link === id ? { ...c, value: v } : c)) });
+    const edited = edit(edit(r.s, r.dimX, 15), r.dimY, 20);
+    const sol = solve({ ...edited, points: { ...edited.points, [pts[0]!]: { x: 0, y: 0, fixed: true } } });
+    expect(sol.ok).toBe(true);
+    const last = sol.sketch.entities.at(-4)!;
+    expect(last.kind === "line" && pt(sol.sketch, last.p1).x).toBeCloseTo(30, 5);
+    expect(last.kind === "line" && pt(sol.sketch, last.p1).y).toBeCloseTo(20, 5);
   });
 
   it("spreads copies around a centre, dropping horizontal/vertical", () => {
@@ -104,6 +120,56 @@ describe("patterns", () => {
   });
 
   it("asks for a selection", () => {
-    expect("error" in linearPattern(emptySketch(), [], { x: 1, y: 0 }, 3, { x: 0, y: 1 }, 1)).toBe(true);
+    expect("error" in linearPattern(emptySketch(), [], 3, 1, 1, 1)).toBe(true);
+  });
+
+  it("makes a one-direction row, held at its spacing, and refuses a single copy", () => {
+    const { s, lines, pts } = square();
+    const r = linearPattern(s, lines, 1, 0, 4, 12);
+    if ("error" in r) throw new Error(r.error);
+    expect(r.s.entities).toHaveLength(16);
+    expect(sketchPaths(r.s).filter((p) => p.closed)).toHaveLength(4);
+    // Move the original: the last copy follows, 36 mm below it.
+    const moved = { ...r.s, points: { ...r.s.points, [pts[0]!]: { x: 5, y: -3, fixed: true } } };
+    const sol = solve(moved);
+    expect(sol.ok).toBe(true);
+    const last = sol.sketch.entities.at(-4)!;
+    expect(last.kind === "line" && pt(sol.sketch, last.p1).x).toBeCloseTo(5, 5);
+    expect(last.kind === "line" && pt(sol.sketch, last.p1).y).toBeCloseTo(33, 5);
+    expect("error" in linearPattern(s, lines, 1, 1, 1, 1)).toBe(true);
+    expect("error" in linearPattern(s, lines, 3, 0, 1, 0)).toBe(true);
+  });
+
+  it("spreads a partial sweep from the original to the end angle", () => {
+    const { s, lines } = square();
+    const c = addPoint(s, { x: -10, y: 0 });
+    const r = circularPattern(c.s, lines, c.id, 3, 90);
+    if ("error" in r) throw new Error(r.error);
+    expect(r.s.entities).toHaveLength(12);
+    // Corner (0, 0) is 10 mm from the centre: 45° and 90° turns put it at these points.
+    const first = (k: number) => {
+      const e = r.s.entities[k * 4]!;
+      return e.kind === "line" ? pt(r.s, e.p1) : null;
+    };
+    expect(first(1)!.x).toBeCloseTo(-10 + 10 * Math.cos(Math.PI / 4), 6);
+    expect(first(1)!.y).toBeCloseTo(10 * Math.sin(Math.PI / 4), 6);
+    expect(first(2)!.x).toBeCloseTo(-10, 6);
+    expect(first(2)!.y).toBeCloseTo(10, 6);
+  });
+
+  it("patterns a circle around a centre; copies keep the original's linked size", () => {
+    const cp = addPoint(emptySketch(), { x: 20, y: 0 });
+    const circ = addEntity(cp.s, { kind: "circle", c: cp.id, r: 3 });
+    const dim = addConstraint(circ.s, { type: "radius", refs: [circ.id], value: 3 });
+    const centre = addPoint(dim.s, { x: 0, y: 0 });
+    const r = circularPattern(centre.s, [circ.id], centre.id, 6);
+    if ("error" in r) throw new Error(r.error);
+    const circles = r.s.entities.filter((e) => e.kind === "circle");
+    expect(circles).toHaveLength(6);
+    for (const e of circles) expect(e.kind === "circle" && Math.hypot(pt(r.s, e.c).x, pt(r.s, e.c).y)).toBeCloseTo(20, 6);
+    const next = { ...r.s, constraints: r.s.constraints.map((c) => (c.id === dim.id || c.link === dim.id ? { ...c, value: 5 } : c)) };
+    const sol = solve(next);
+    expect(sol.ok).toBe(true);
+    for (const e of sol.sketch.entities) if (e.kind === "circle") expect(e.r).toBeCloseTo(5, 5);
   });
 });

@@ -43,6 +43,8 @@ export interface Overlay {
   fillHover?: { rings: Vec[][]; color: string } | null;
   /** Units for the ruler labels (default mm). */
   units?: Units;
+  /** Auto arrange: the scrap area parts are packed into (bed mm). */
+  area?: Box | null;
 }
 
 function traceRing(ctx: CanvasRenderingContext2D, m: Mat, ring: Vec[]): void {
@@ -337,6 +339,18 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: n
     ctx.stroke();
   }
 
+  if (ov.area) {
+    const a = toScreen(v, { x: ov.area.minX, y: ov.area.minY });
+    const c = toScreen(v, { x: ov.area.maxX, y: ov.area.maxY });
+    ctx.fillStyle = "rgba(234, 88, 12, 0.06)";
+    ctx.strokeStyle = "#ea580c";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.fillRect(a.x, a.y, c.x - a.x, c.y - a.y);
+    ctx.strokeRect(a.x, a.y, c.x - a.x, c.y - a.y);
+    ctx.setLineDash([]);
+    ctx.lineWidth = 1;
+  }
   if (ov.marquee) {
     const a = toScreen(v, { x: ov.marquee.minX, y: ov.marquee.minY });
     const c = toScreen(v, { x: ov.marquee.maxX, y: ov.marquee.maxY });

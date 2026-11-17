@@ -54,6 +54,7 @@ import { InlineNameField } from "../../ui/InlineName";
 import { IconButton } from "../../ui/icons";
 import { NumberInput } from "../../ui/NumberInput";
 import { notify } from "../../scene/store";
+import { applyLinearPattern, linearPatternSpacing } from "./modify";
 import { constrainSelected, preview, resetTool, toggleConstruction } from "./controller";
 import { hitBoxes, sketchScreenMat } from "./render";
 import { type Tool, cancelSketch, closeTextEditor, dimensionSuggestions, editingDimension, editingSuggestion, editingText, finishSketch, redoSketch, renameSketch, session, setSketch, setTool, toolOptions, undoSketch, updateText } from "./state";
@@ -219,13 +220,24 @@ function ToolOptions({ tool }: { tool: Tool }) {
     <NumberInput class="ws-sketch-count" value={value} label={label} step={1} min={min} max={100} decimals={0} onCommit={(v) => onCommit(Math.round(v))} onInvalid={(m) => notify(m, "error")} />
   );
   if (tool === "polygon") return <span class="ws-sketch-opts">{t("Sides")} {field(t("Number of sides"), o.sides, 3, (v) => set({ sides: v }))}</span>;
-  if (tool === "linearPattern")
+  if (tool === "linearPattern") {
+    const sp = linearPatternSpacing();
+    const spacing = (label: string, mm: number, onCommit: (v: number) => void) => (
+      <NumberInput class="ws-sketch-count ws-sketch-spacing" value={mm} label={label} onCommit={onCommit} onInvalid={(m) => notify(m, "error")} />
+    );
     return (
       <span class="ws-sketch-opts">
-        {t("Copies")} {field(t("Copies in the first direction (the original included)"), o.count1, 1, (v) => set({ count1: v }))} ×{" "}
-        {field(t("Copies in the second direction (1 for a single row)"), o.count2, 1, (v) => set({ count2: v }))}
+        {t("Columns")} {field(t("Copies along X (the original included)"), o.count1, 1, (v) => set({ count1: v }))} {t("X spacing")}{" "}
+        {spacing(t("Distance between columns, from one copy to the next (negative goes left)"), sp.dx, (v) => set({ dx: v }))} mm
+        <span class="ws-sep" />
+        {t("Rows")} {field(t("Copies along Y (1 for a single row)"), o.count2, 1, (v) => set({ count2: v }))} {t("Y spacing")}{" "}
+        {spacing(t("Distance between rows, from one copy to the next (negative goes up)"), sp.dy, (v) => set({ dy: v }))} mm
+        <button type="button" class="ws-sketch-apply" onClick={() => { applyLinearPattern(); resetTool(); }} title={t("Make the copies (Enter)")}>
+          {t("Apply")}
+        </button>
       </span>
     );
+  }
   if (tool === "circularPattern") return <span class="ws-sketch-opts">{t("Copies")} {field(t("Copies around the circle (the original included)"), o.countC, 2, (v) => set({ countC: v }))}</span>;
   return null;
 }

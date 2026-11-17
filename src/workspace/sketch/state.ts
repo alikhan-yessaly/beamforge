@@ -67,7 +67,7 @@ export interface SketchSession {
 
 export const session = signal<SketchSession | null>(null);
 /** Settings for the shape and pattern tools, shown in the toolbar while the tool is active. */
-export const toolOptions = signal({ sides: 6, count1: 3, count2: 1, countC: 6 });
+export const toolOptions = signal<{ sides: number; count1: number; count2: number; countC: number; dx: number | null; dy: number | null }>({ sides: 6, count1: 3, count2: 1, countC: 6, dx: null, dy: null });
 /** Text entity whose words, size and font are being edited, with the sketch from before (one undo step). */
 export const editingText = signal<{ id: string; before: Sketch; isNew: boolean } | null>(null);
 /** Dimension whose value is being typed (constraint id). */
@@ -173,6 +173,8 @@ export const patchSession = (patch: Partial<SketchSession>) => {
 export function setTool(tool: Tool): void {
   const active = session.value?.tool;
   patchSession({ tool: active === tool && tool !== "select" ? "select" : tool });
+  // A new linear pattern starts from spacing fitted to the selection (null = side by side, 5 mm apart).
+  if (tool === "linearPattern" && active !== tool) toolOptions.value = { ...toolOptions.value, dx: null, dy: null };
 }
 
 export function undoSketch(): void {

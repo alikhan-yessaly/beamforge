@@ -20,11 +20,11 @@ export type PreviewShape =
   | { kind: "line"; a: Vec; b: Vec; hv?: "h" | "v" | null; construction?: boolean }
   | { kind: "circle"; c: Vec; r: number }
   | { kind: "arc"; c: Vec; r: number; a0: number; a1: number }
-  | { kind: "polyline"; pts: Vec[]; closed?: boolean }
+  | { kind: "polyline"; pts: Vec[]; closed?: boolean; ghost?: boolean }
   | { kind: "trim"; piece: TrimPiece }
   | { kind: "snap"; at: Vec; type: "point" | "curve" }
   | { kind: "guide"; a: Vec; b: Vec; type: "horizontal" | "vertical" }
-  | { kind: "dimension"; constraint: Constraint; locked?: boolean }
+  | { kind: "dimension"; constraint: Constraint; locked?: boolean; sketch?: Sketch }
   | { kind: "marquee"; a: Vec; b: Vec };
 
 export interface Preview {
@@ -382,6 +382,11 @@ function drawPreview(ctx: CanvasRenderingContext2D, s: Sketch, p: Preview, S: (v
       }
       ctx.stroke();
     } else if (sh.kind === "polyline") {
+      // A pattern's shadow: faint and dashed until it is applied.
+      if (sh.ghost) {
+        ctx.globalAlpha = 0.55;
+        ctx.setLineDash([5, 4]);
+      }
       sh.pts.forEach((v, i) => {
         const q = S(v);
         if (i === 0) ctx.moveTo(q.x, q.y);
@@ -389,6 +394,7 @@ function drawPreview(ctx: CanvasRenderingContext2D, s: Sketch, p: Preview, S: (v
       });
       if (sh.closed) ctx.closePath();
       ctx.stroke();
+      ctx.globalAlpha = 1;
     } else if (sh.kind === "snap") {
       const q = S(sh.at);
       ctx.strokeStyle = "#16a34a";
@@ -412,7 +418,7 @@ function drawPreview(ctx: CanvasRenderingContext2D, s: Sketch, p: Preview, S: (v
       ctx.font = "11px system-ui, sans-serif";
       ctx.fillText(sh.type === "horizontal" ? "H" : "V", (a.x + b.x) / 2 + 5, (a.y + b.y) / 2 - 5);
     } else if (sh.kind === "dimension") {
-      drawDimension(ctx, s, sh.constraint, S, 1, false, false, true, sh.locked);
+      drawDimension(ctx, sh.sketch ?? s, sh.constraint, S, 1, false, false, true, sh.locked);
     } else if (sh.kind === "marquee") {
       const [a, b] = [S(sh.a), S(sh.b)];
       ctx.setLineDash([4, 3]);

@@ -137,7 +137,8 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
   - SVG, DXF, PNG and JPEG can keep the position on the bed.
 - **Sketch mode** is a small parametric CAD editor:
   - Drawing tools: line, rectangle, circle, arc, slot, polygon, spline, point and text.
-  - Modify tools: trim, fillet, chamfer, offset, mirror, and linear, grid and circular patterns.
+  - Modify tools: trim, fillet, chamfer, offset, mirror, and linear, grid and circular patterns. A linear pattern
+    runs along X and Y, shows a preview until you apply it, and keeps its spacing as editable dimensions.
   - Constraints: dimensions, coincident, horizontal, vertical, parallel, perpendicular, tangent, equal, midpoint,
     concentric, symmetric and fix.
   - It snaps to points, curves and the grid, and infers horizontal and vertical alignment as you draw.
@@ -147,6 +148,11 @@ The design in these screenshots is [`samples/demo.dxf`](samples/demo.dxf).
   - Text uses the bundled Roboto font or, in Chrome, your computer's fonts.
 - On the canvas, move, scale, stretch, rotate, mirror, align, group and nudge objects. Undo, copy and paste work
   as usual. Press **?** for the shortcut sheet.
+- Arrange tools in the Properties panel:
+  - Distribute objects with a set gap, or space them evenly.
+  - Linear pattern: copies of the selection in columns and rows, with gaps between them.
+  - Auto arrange: pack the selection from the home corner with a minimum gap, optionally rotating parts for the
+    best fit and packing only inside an area, such as a scrap of material.
 
 ### Layers, fill and materials
 

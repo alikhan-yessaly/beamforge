@@ -45,6 +45,8 @@ export interface Prefs {
   advanced: boolean;
   /** Units for lengths shown and typed in the interface (default mm). Files and the machine always use mm. */
   units?: Units;
+  /** Distribute gap, linear pattern and auto-arrange settings (src/workspace/ArrangePanel.tsx). */
+  arrange?: Partial<import("../workspace/ArrangePanel").ArrangePrefs>;
 }
 
 export const doc = signal<Doc>(migrateDoc(load<Doc>(DOC_KEY, { objects: [], layers: [] })));

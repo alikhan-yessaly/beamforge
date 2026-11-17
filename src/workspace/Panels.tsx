@@ -45,6 +45,7 @@ import { presetOf, presets, savePresets } from "./materials";
 import { type AlignMode, align, objectScale, selectionBox, setObjectScale, setSelectionBox } from "../scene/ops";
 import { addMachine, canRedo, canUndo, commit, cursor, doc, machinePrompt, machines, messages, notify, prefs, profile, removeMachine, selBox, selectMachine, selection, updateMachine } from "../scene/store";
 import { HelpMenu } from "./HelpMenu";
+import { ArrangeSections, DistributeRow } from "./ArrangePanel";
 import { FirstJobChecklist } from "./FirstJobChecklist";
 import { IMPORT_ACCEPT, actions, importFiles, renameObject, renaming } from "./actions";
 import { InlineNameField } from "../ui/InlineName";
@@ -198,6 +199,8 @@ export function PropertiesPanel() {
         <IconButton icon={Group} label={t("Group (⌘G)")} disabled={ids.size < 2} onClick={actions.group} />
         <IconButton icon={Ungroup} label={t("Ungroup (⇧⌘G)")} disabled={!b} onClick={actions.ungroup} />
       </div>
+      {ids.size > 1 && <DistributeRow />}
+      <ArrangeSections />
     </section>
   );
 }

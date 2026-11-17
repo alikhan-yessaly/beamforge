@@ -1,7 +1,7 @@
 // Shape tools and patterns (pure): slot, regular polygon, linear/grid and circular patterns.
 import { t } from "../i18n";
 import type { Vec } from "../geom/geom";
-import { type Constraint, type Entity, type NewEntity, type Sketch, addConstraint, addEntity, addPoint, entity, entityPoints, pt } from "./model";
+import { type Constraint, type Entity, type NewEntity, type Sketch, addConstraint, addEntity, addPoint, entity, entityPoints, pt, sketchBox } from "./model";
 import { type Click, pointFor } from "./draw";
 
 interface Opts {
@@ -158,26 +158,75 @@ function anchorOf(s: Sketch, ids: string[]): string | null {
   return null;
 }
 
-/** Linear (one direction) or grid (two) pattern: copies at i·step1 + j·step2, held there relative to the original. */
-export function linearPattern(s: Sketch, ids: string[], step1: Vec, count1: number, step2: Vec, count2: number): { s: Sketch } | { error: string } {
+/** Bounding box of the given entities (sketch mm), or null when none exist. */
+export function itemsBox(s: Sketch, ids: string[]): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const set = new Set(ids);
+  const b = sketchBox({ ...s, entities: s.entities.filter((e) => set.has(e.id)) });
+  return Number.isFinite(b.minX) ? b : null;
+}
+
+/** Spacing that puts copies side by side with a 5 mm gap: the selection's size plus 5, rounded to whole mm. */
+export function defaultPatternSpacing(s: Sketch, ids: string[]): { dx: number; dy: number } {
+  const b = itemsBox(s, ids);
+  if (!b) return { dx: 10, dy: 10 };
+  return { dx: Math.max(1, Math.round(b.maxX - b.minX + 5)), dy: Math.max(1, Math.round(b.maxY - b.minY + 5)) };
+}
+
+/** Where each copy of a linear pattern goes (column i, row j → offset), the original (0, 0) left out. */
+export function patternOffsets(nx: number, dx: number, ny: number, dy: number): Vec[] {
+  const out: Vec[] = [];
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) if (i || j) out.push({ x: i * dx, y: j * dy });
+  return out;
+}
+
+/**
+ * Linear pattern along X (columns, `dx` apart) and Y (rows, `dy` apart; y points down as on the bed). Each copy is
+ * held to its neighbour by the spacing; one visible X and one visible Y dimension drive every step, so the
+ * spacing stays editable afterwards (the others are hidden and linked to them).
+ */
+export function linearPattern(s: Sketch, ids: string[], nx: number, dx: number, ny: number, dy: number): { s: Sketch; dimX?: string; dimY?: string } | { error: string } {
   const anchor = anchorOf(s, ids);
   if (!anchor) return { error: t("Select the geometry to pattern first.") };
-  let out = s;
-  const n1 = Math.max(1, Math.round(count1));
-  const n2 = Math.max(1, Math.round(count2));
+  const n1 = Math.max(1, Math.round(nx));
+  const n2 = Math.max(1, Math.round(ny));
   if (n1 * n2 < 2) return { error: t("Set more than one copy.") };
-  for (let i = 0; i < n1; i++) {
-    for (let j = 0; j < n2; j++) {
-      if (!i && !j) continue;
-      const d = { x: i * step1.x + j * step2.x, y: i * step1.y + j * step2.y };
-      const c = copyItems(out, ids, (p) => ({ x: p.x + d.x, y: p.y + d.y }), true);
+  if (!Number.isFinite(dx) || !Number.isFinite(dy) || (n1 > 1 && !dx) || (n2 > 1 && !dy)) return { error: t("Set a spacing other than 0.") };
+  let out = s;
+  const at: string[][] = []; // anchor point of copy [row][column]
+  for (let j = 0; j < n2; j++) {
+    at.push([]);
+    for (let i = 0; i < n1; i++) {
+      if (!i && !j) {
+        at[0]!.push(anchor);
+        continue;
+      }
+      const c = copyItems(out, ids, (p) => ({ x: p.x + i * dx, y: p.y + j * dy }), true);
       out = c.s;
-      const a = c.map.get(anchor)!;
-      out = addConstraint(out, { type: "distanceX", refs: [anchor, a], value: d.x, hidden: true }).s;
-      out = addConstraint(out, { type: "distanceY", refs: [anchor, a], value: d.y, hidden: true }).s;
+      at[j]!.push(c.map.get(anchor)!);
     }
   }
-  return { s: out };
+  let dimX: string | undefined, dimY: string | undefined;
+  const step = (type: "distanceX" | "distanceY", a: string, b: string, value: number, master: string | undefined) => {
+    const r = addConstraint(out, { type, refs: [a, b], value, ...(master ? { hidden: true, link: master } : { offset: type === "distanceX" ? { x: 0, y: -6 } : { x: -6, y: 0 } }) });
+    out = r.s;
+    return r.id;
+  };
+  for (let j = 0; j < n2; j++) {
+    for (let i = 0; i < n1; i++) {
+      if (i) {
+        // Along the row: dx from the left neighbour, level with it.
+        const id = step("distanceX", at[j]![i - 1]!, at[j]![i]!, dx, dimX);
+        dimX ??= id;
+        out = addConstraint(out, { type: "horizontalPts", refs: [at[j]![i - 1]!, at[j]![i]!], hidden: true }).s;
+      } else if (j) {
+        // First column: dy below the row above, in line with it.
+        const id = step("distanceY", at[j - 1]![0]!, at[j]![0]!, dy, dimY);
+        dimY ??= id;
+        out = addConstraint(out, { type: "verticalPts", refs: [at[j - 1]![0]!, at[j]![0]!], hidden: true }).s;
+      }
+    }
+  }
+  return { s: out, ...(dimX ? { dimX } : {}), ...(dimY ? { dimY } : {}) };
 }
 
 /** Circular pattern: `count` items in all (the original included) spread evenly around the centre point. */

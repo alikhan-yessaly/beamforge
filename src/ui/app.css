@@ -706,3 +706,12 @@ body > #workspace { height: 100%; border: 0; }
 .ws .ws-machine-status.sim { background: #f5f3ff; border-color: #c4b5fd; color: #5b21b6; }
 .ws .ws-machine-status.sim svg { color: #7c3aed; }
 .ws .ws-sim-note { color: #5b21b6; }
+
+/* Arrange tools (src/workspace/ArrangePanel.tsx): compact labelled number boxes. */
+.ws .ws-num-sm { grid-template-columns: max-content 3.6rem max-content; margin: 0; }
+.ws .ws-num-sm input { width: 3.6rem; }
+.ws .ws-arrange { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem .6rem; }
+.ws .ws-arrange-btn { display: inline-flex; align-items: center; gap: .3rem; }
+.ws .ws-sketch-opts input.ws-sketch-spacing, .ws .ws-sketch-opts .ws-sketch-spacing input { width: 4.2rem; }
+.ws .ws-sketch-opts .ws-sep { height: 1.2rem; align-self: center; }
+.ws .ws-sketch-apply { margin-left: .4rem; }

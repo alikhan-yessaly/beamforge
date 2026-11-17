@@ -577,7 +577,10 @@ export function sketchKey(e: KeyboardEvent): boolean {
     else patchSession({ selected: new Set() });
     return true;
   }
-  if (k === "enter" && modifyEnter(ses.tool)) return true;
+  if (k === "enter" && modifyEnter(ses.tool)) {
+    if (ses.tool === "linearPattern") resetTool(); // clear the pattern's hint
+    return true;
+  }
   if (k === "delete" || k === "backspace") {
     deleteSelected();
     return true;

@@ -8,6 +8,8 @@ import { commit, cursor, doc, prefs, profile, selBox, selection } from "../scene
 import { importFiles } from "./actions";
 import { preview as sketchPreview, resetTool as resetSketchTool, sketchDoubleClick, sketchPointerDown, sketchPointerMove, sketchPointerUp } from "./sketch/controller";
 import { drawSketch } from "./sketch/render";
+import { patternShadow } from "./sketch/modify";
+import { arrangeArea } from "./ArrangePanel";
 import { lang } from "../i18n";
 import { fillClick, fillHover, fillTool, hoverRings, regionUnder } from "./fillTool";
 import { fontsVersion } from "./sketch/fonts";
@@ -91,7 +93,9 @@ export function Canvas() {
   const jobOrigin = originUm ? fromUser(p, { x: originUm.x / 1000, y: originUm.y / 1000 }) : null;
   const bedStatus = bedLoad.value.state;
   const ses = sketchSession.value;
-  const skPreview = sketchPreview.value;
+  const shadow = patternShadow.value;
+  const area = arrangeArea.value;
+  const skPreview = shadow.length ? { ...sketchPreview.value, shapes: [...sketchPreview.value.shapes, ...shadow] } : sketchPreview.value;
   const skSuggestions = dimensionSuggestions.value;
   void fontsVersion.value; // redraw sketch text once its font has loaded
   void imagesVersion.value; // and imported pictures once decoded
@@ -118,7 +122,7 @@ export function Canvas() {
       const others = { ...d, objects: d.objects.filter((o) => o.id !== ses.objectId) };
       draw(ctx, size.w, size.h, dpr, v, others, p, { selection: new Set(), selBox: null, hover: null, marquee: null, dimObjects: true, units });
       drawSketch(ctx, v, ses, skPreview, skSuggestions);
-    } else draw(ctx, size.w, size.h, dpr, v, d, p, { selection: device ? new Set() : sel, selBox: device ? null : sb, hover: device ? null : hover, marquee, preview: pvData, head, projectedHead, jobOrigin, fillHover: ft && fillPreview ? { rings: fillPreview, color: ft.color } : null, units });
+    } else draw(ctx, size.w, size.h, dpr, v, d, p, { selection: device ? new Set() : sel, selBox: device ? null : sb, hover: device ? null : hover, marquee, preview: pvData, head, projectedHead, jobOrigin, fillHover: ft && fillPreview ? { rings: fillPreview, color: ft.color } : null, units, area: device ? null : area });
   });
 
   useEffect(() => {

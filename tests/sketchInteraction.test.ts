@@ -2,8 +2,9 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { addConstraint, addEntity, addPoint, emptySketch } from "../src/sketch/model";
 import { loadSolver } from "../src/sketch/solver";
 import { constrainSelected, deleteSelected, preview, resetTool, sketchKey, sketchPointerDown, sketchPointerMove, sketchPointerUp } from "../src/workspace/sketch/controller";
-import { dimensionSuggestions, editingSuggestion, session, setSketch, setTool, undoSketch } from "../src/workspace/sketch/state";
+import { dimensionSuggestions, editingSuggestion, session, setSketch, setTool, toolOptions, undoSketch } from "../src/workspace/sketch/state";
 import { view } from "../src/workspace/view";
+import { applyLinearPattern, linearPatternSpacing, patternShadow } from "../src/workspace/sketch/modify";
 import { prefs, profile } from "../src/scene/store";
 import { apply } from "../src/geom/geom";
 import { toUser } from "../src/scene/model";
@@ -450,5 +451,61 @@ describe("sketch selection", () => {
     expect(session.value!.sketch.points[secondA.id]!.x).toBeCloseTo(30, 3);
     expect(session.value!.sketch.points[secondA.id]!.y).toBeCloseTo(110, 3);
     expect(session.value!.undo).toHaveLength(1);
+  });
+});
+
+describe("pattern tools", () => {
+  it("linear: shadow from the options until Enter, then copies along X and Y", () => {
+    const { first } = setupSketch();
+    session.value = { ...session.value!, selected: new Set([first.id]) };
+    setTool("linearPattern");
+    toolOptions.value = { ...toolOptions.value, count1: 3, count2: 1, dx: 25, dy: null };
+    // Nothing is added yet, only previewed.
+    expect(session.value!.sketch.entities).toHaveLength(2);
+    expect(patternShadow.value.filter((p) => p.kind === "polyline")).toHaveLength(2);
+    expect(patternShadow.value.some((p) => p.kind === "dimension")).toBe(true);
+    expect(sketchKey({ key: "Enter", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false } as KeyboardEvent)).toBe(true);
+    const s = session.value!.sketch;
+    const lines = s.entities.filter((e) => e.kind === "line");
+    expect(lines).toHaveLength(4);
+    const xs = lines.map((e) => (e.kind === "line" ? Math.round(s.points[e.p1]!.x) : 0)).sort((a, b) => a - b);
+    expect(xs).toEqual([20, 20, 45, 70]); // the two originals, then copies 25 mm apart
+    expect(session.value!.tool).toBe("select");
+    expect(patternShadow.value).toHaveLength(0);
+    undoSketch();
+    expect(session.value!.sketch.entities).toHaveLength(2);
+  });
+
+  it("linear grid: rows go down by the Y spacing; spacing defaults to the selection size + 5", () => {
+    const { first } = setupSketch();
+    session.value = { ...session.value!, selected: new Set([first.id]) };
+    setTool("linearPattern");
+    toolOptions.value = { ...toolOptions.value, count1: 2, count2: 2 };
+    const { dx, dy } = linearPatternSpacing();
+    expect(dx).toBeGreaterThan(0);
+    expect(dy).toBeGreaterThan(0);
+    applyLinearPattern();
+    expect(session.value!.sketch.entities).toHaveLength(5);
+  });
+
+  it("circular: one click on the centre makes the copies around it", () => {
+    const { first } = setupSketch();
+    session.value = { ...session.value!, selected: new Set([first.id]) };
+    toolOptions.value = { ...toolOptions.value, countC: 4 };
+    setTool("circularPattern");
+    click(70, 250);
+    const s = session.value!.sketch;
+    expect(s.entities.filter((e) => e.kind === "line")).toHaveLength(5);
+    // The copy turned 180° lies at y = 450, mirrored through the centre.
+    const ys = s.entities.flatMap((e) => (e.kind === "line" ? [Math.round(s.points[e.p1]!.y)] : []));
+    expect(ys).toContain(450);
+    expect(session.value!.status.ok).toBe(true);
+  });
+
+  it("asks for a selection first", () => {
+    setupSketch();
+    setTool("circularPattern");
+    click(70, 250);
+    expect(session.value!.sketch.entities).toHaveLength(2);
   });
 });

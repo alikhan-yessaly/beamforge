@@ -7,10 +7,11 @@ import { type Sketch, addEntity, entity } from "../../sketch/model";
 import { addedEntities, chamferAt, filletAt, mirrorItems, offsetAt, offsetDistance, trimAt, trimPieceAt } from "../../sketch/modify";
 import { entityPolylines, splinePoints } from "../../sketch/paths";
 import { nearestEntity, nearestPoint } from "../../sketch/pick";
-import { circularPattern, drawPolygon, drawSlot, linearPattern } from "../../sketch/shapes";
+import { circularPattern, defaultPatternSpacing, drawPolygon, drawSlot, linearPattern } from "../../sketch/shapes";
+import { computed } from "@preact/signals";
 import { notify } from "../../scene/store";
 import type { PreviewShape } from "./render";
-import { type Tool, editingDimension, editingText, patchSession, session, setSketch, textDefaults, toolOptions } from "./state";
+import { type Tool, editingDimension, editingText, patchSession, session, setSketch, setTool, textDefaults, toolOptions } from "./state";
 
 export interface ModifyPreview {
   shapes: PreviewShape[];
@@ -148,9 +149,11 @@ export function runModifyClick(tool: Tool, _c: Click, p: Vec, _shift: boolean, t
       pending.push(_c);
       return;
     }
+    case "linearPattern":
+      // Applied with Enter or the Apply button only, so clicking away from a field doesn't make copies.
+      return;
     case "slot":
     case "polygon":
-    case "linearPattern":
     case "circularPattern": {
       const r = shapeStep(tool, s, [...pending, _c], ses.construction, [...ses.selected]);
       if (r === "more") {
@@ -184,6 +187,7 @@ function finishSpline(closed: boolean): void {
 
 /** Enter: end a spline being drawn. */
 export function modifyEnter(tool: Tool): boolean {
+  if (tool === "linearPattern") return applyLinearPattern(), true;
   if (tool !== "spline" || pending.length < 2) return false;
   finishSpline(false);
   return true;
@@ -208,14 +212,6 @@ function shapeStep(tool: Tool, s: Sketch, cl: Click[], construction: boolean, se
     case "polygon":
       if (cl.length < 2) return "more";
       return drawPolygon(s, cl[0]!, at(cl[1]!), opt.sides, o) ?? { error: t("Polygon: click away from the centre.") };
-    case "linearPattern": {
-      if (!items.length) return { error: t("Select the geometry to pattern first (select tool, S), then pick this tool.") };
-      const need = opt.count2 > 1 ? 3 : 2;
-      if (cl.length < need) return "more";
-      const base = at(cl[0]!);
-      const step = (c: Click) => ({ x: at(c).x - base.x, y: at(c).y - base.y });
-      return linearPattern(s, items, step(cl[1]!), opt.count1, need === 3 ? step(cl[2]!) : { x: 0, y: 0 }, opt.count2);
-    }
     case "circularPattern": {
       if (!items.length) return { error: t("Select the geometry to pattern first (select tool, S), then pick this tool.") };
       const pc = pointFor(s, cl[0]!);
@@ -271,9 +267,11 @@ export function modifyPreview(tool: Tool, p: Vec, tol: number, click: Click): Mo
       const shapes: PreviewShape[] = pts.length >= 2 ? [{ kind: "polyline", pts: splinePoints(pts, false) }] : [];
       return { shapes, hover: null, hint: pending.length < 2 ? t("Click points the curve passes through") : t("Click more points; click the last point again or press Enter to end, the first to close") };
     }
+    case "linearPattern":
+      // The shadow itself is patternShadow (drawn without waiting for the mouse).
+      return { shapes: [], hover: null, hint: session.value!.selected.size ? t("Set columns, rows and spacing; press Enter or Apply, Esc to cancel") : t("Select the geometry to pattern first (select tool, S), then pick this tool.") };
     case "slot":
     case "polygon":
-    case "linearPattern":
     case "circularPattern": {
       const ses = session.value!;
       const r = shapeStep(tool, s, [...pending, click], ses.construction, [...ses.selected]);
@@ -283,7 +281,6 @@ export function modifyPreview(tool: Tool, p: Vec, tol: number, click: Click): Mo
       const hint = {
         slot: [t("Click the first end's centre"), t("Click the second end's centre"), t("Click to set the width")][pending.length],
         polygon: [t("Click the centre ({n} sides)", { n: opt.sides }), t("Click a corner")][pending.length],
-        linearPattern: [t("Click a base point"), t("Click where the first copy goes"), t("Click where the first copy of the second direction goes")][pending.length],
         circularPattern: [t("Click the centre ({n} in all)", { n: opt.countC })][pending.length],
       }[tool];
       return { shapes, hover: null, ...(hint ? { hint } : {}) };
@@ -291,4 +288,41 @@ export function modifyPreview(tool: Tool, p: Vec, tol: number, click: Click): Mo
     default:
       return { shapes: [], hover: null };
   }
+}
+
+/** The linear pattern the current selection and tool options would make (null when the tool isn't active). */
+function linearPatternResult(): ReturnType<typeof linearPattern> | null {
+  const ses = session.value;
+  if (!ses || ses.tool !== "linearPattern") return null;
+  const items = [...ses.selected].filter((id) => entity(ses.sketch, id));
+  if (!items.length) return { error: t("Select the geometry to pattern first (select tool, S), then pick this tool.") };
+  const sp = linearPatternSpacing();
+  const o = toolOptions.value;
+  return linearPattern(ses.sketch, items, o.count1, sp.dx, o.count2, sp.dy);
+}
+
+/** The spacing in use: what was typed, or fitted to the selection. */
+export function linearPatternSpacing(): { dx: number; dy: number } {
+  const ses = session.value;
+  const o = toolOptions.value;
+  const auto = ses ? defaultPatternSpacing(ses.sketch, [...ses.selected].filter((id) => entity(ses.sketch, id))) : { dx: 10, dy: 10 };
+  return { dx: o.dx ?? auto.dx, dy: o.dy ?? auto.dy };
+}
+
+/** Shadow of the copies (and their spacing dimensions) until the pattern is applied. */
+export const patternShadow = computed<PreviewShape[]>(() => {
+  const r = linearPatternResult();
+  if (!r || "error" in r) return [];
+  const before = session.value!.sketch;
+  const dims = [r.dimX, r.dimY].flatMap((id) => r.s.constraints.filter((c) => c.id === id)).map((c) => ({ kind: "dimension" as const, constraint: { ...c, id: "__preview__" }, sketch: r.s }));
+  return [...outline(before, r.s).map((sh) => (sh.kind === "polyline" ? { ...sh, ghost: true } : sh)), ...dims];
+});
+
+/** Make the previewed linear pattern; its spacing dimensions stay editable (double-click them). */
+export function applyLinearPattern(): void {
+  const r = linearPatternResult();
+  if (!r) return;
+  if ("error" in r) return void notify(r.error, "warn");
+  setSketch(r.s);
+  setTool("select");
 }
